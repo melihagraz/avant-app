@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView
+  TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
@@ -12,6 +12,7 @@ interface Message {
   sender_id: string;
   content: string;
   created_at: string;
+  failed?: boolean;
 }
 
 export default function HumanChatScreen({ route, navigation }: any) {
@@ -21,9 +22,13 @@ export default function HumanChatScreen({ route, navigation }: any) {
   const [myUserId, setMyUserId] = useState('');
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const listRef = useRef<FlatList>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     init();
+    return () => {
+      unsubscribeRef.current?.();
+    };
   }, []);
 
   const init = async () => {
@@ -32,7 +37,8 @@ export default function HumanChatScreen({ route, navigation }: any) {
       if (user) setMyUserId(user.id);
       await fetchMessages();
       await fetchMatchScore();
-      subscribeToMessages();
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = subscribeToMessages();
     } catch (err) {
       console.error('HumanChat init error:', err);
     }
@@ -78,8 +84,9 @@ export default function HumanChatScreen({ route, navigation }: any) {
     if (!text) return;
     setInput('');
 
+    const tempId = Date.now().toString();
     const tempMsg: Message = {
-      id: Date.now().toString(),
+      id: tempId,
       sender_id: myUserId,
       content: text,
       created_at: new Date().toISOString(),
@@ -87,13 +94,26 @@ export default function HumanChatScreen({ route, navigation }: any) {
     setMessages(prev => [...prev, tempMsg]);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
 
-    await supabase.from('human_messages').insert({
+    const { error } = await supabase.from('human_messages').insert({
       match_id: matchId,
       sender_id: myUserId,
       content: text,
     });
 
+    if (error) {
+      // Mesajı failed olarak işaretle
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true } : m));
+      Alert.alert('Hata', 'Mesaj gönderilemedi. Tekrar dene.');
+      return;
+    }
+
     fetchMessages();
+  };
+
+  const retryMessage = async (msg: Message) => {
+    // Başarısız mesajı kaldır ve tekrar gönder
+    setMessages(prev => prev.filter(m => m.id !== msg.id));
+    setInput(msg.content);
   };
 
   const formatTime = (dateStr: string) => {
@@ -139,14 +159,20 @@ export default function HumanChatScreen({ route, navigation }: any) {
             </LinearGradient>
           )}
           <View>
-            <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleOther]}>
+            <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleOther, item.failed && s.bubbleFailed]}>
               <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>
                 {item.content}
               </Text>
             </View>
-            <Text style={[s.timestamp, isMe && s.timestampRight]}>
-              {formatTime(item.created_at)}
-            </Text>
+            {item.failed ? (
+              <TouchableOpacity onPress={() => retryMessage(item)} style={s.retryRow}>
+                <Text style={s.failedText}>Gönderilemedi · Tekrar dene</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[s.timestamp, isMe && s.timestampRight]}>
+                {formatTime(item.created_at)}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -267,4 +293,7 @@ const s = StyleSheet.create({
   sendBtnOff: { opacity: 0.5 },
   sendGrad: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   sendIcon: { color: '#fff', fontSize: 22, fontWeight: '600' },
+  bubbleFailed: { backgroundColor: '#7C3AED', opacity: 0.6 },
+  failedText: { fontSize: 11, color: '#FF6B9D', marginTop: 4, marginRight: 6, textAlign: 'right', fontWeight: '600' },
+  retryRow: { alignSelf: 'flex-end' },
 });

@@ -13,12 +13,39 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { user_id } = await req.json();
-    if (!user_id) throw new Error('user_id required');
+    // JWT'den authenticated user'ı doğrula
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization header required' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
+
+    // Token'dan user'ı al ve body'deki user_id ile karşılaştır
+    const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: { user: authUser }, error: authErr } = await anonClient.auth.getUser();
+    if (authErr || !authUser) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { user_id } = await req.json();
+    if (!user_id) throw new Error('user_id required');
+
+    // Kullanıcı sadece kendi hesabını silebilir
+    if (authUser.id !== user_id) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: can only delete own account' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 1. Agent ID'lerini bul
     const { data: agentData } = await supabase

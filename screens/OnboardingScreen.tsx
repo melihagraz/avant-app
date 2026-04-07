@@ -3,12 +3,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, SafeAreaView,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { buildAgentSystemPrompt } from '../lib/agentPrompt';
+
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 type QuestionType = 'text' | 'number' | 'chips' | 'chips_multi' | 'photo';
 
@@ -177,13 +179,26 @@ export default function OnboardingScreen({ navigation }: any) {
     setTimeout(() => advance(chip.label, chip.value), 150);
   };
 
+  const validateInput = (value: string, question: Question): boolean => {
+    if (question.type === 'number') {
+      if (!/^\d+$/.test(value)) return false;
+      const n = Number(value);
+      if (n < 18 || n > 80) return false;
+      return true;
+    }
+    if (question.id === 'name') {
+      if (value.length < 2 || value.length > 50) return false;
+    }
+    if (['personality', 'looking_for', 'dealbreakers', 'extra'].includes(question.id)) {
+      if (value.length > 500) return false;
+    }
+    return true;
+  };
+
   const sendText = () => {
     if (busy || !input.trim()) return;
     const v = input.trim();
-    if (currentQ.type === 'number') {
-      const n = parseInt(v);
-      if (isNaN(n) || n < 18 || n > 80) return;
-    }
+    if (!validateInput(v, currentQ)) return;
     advance(v, v);
   };
 
@@ -210,7 +225,12 @@ export default function OnboardingScreen({ navigation }: any) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_PHOTO_SIZE_BYTES) {
+        Alert.alert('Dosya çok büyük', 'Fotoğraf en fazla 5MB olabilir.');
+        return;
+      }
+      setPhotoUri(asset.uri);
     }
   };
 
@@ -286,7 +306,7 @@ export default function OnboardingScreen({ navigation }: any) {
         name: finalAnswers.name,
         age: parseInt(finalAnswers.age),
         gender: finalAnswers.gender,
-        seeking: finalAnswers.seeking?.split(',') || [],
+        seeking: finalAnswers.seeking?.split(',').filter(Boolean) || [],
         city: finalAnswers.city,
         age_min: ageMin,
         age_max: ageMax,
@@ -466,7 +486,7 @@ export default function OnboardingScreen({ navigation }: any) {
                 placeholderTextColor="#C4B5D0"
                 multiline={currentQ.type === 'text'}
                 keyboardType={currentQ.type === 'number' ? 'number-pad' : 'default'}
-                maxLength={currentQ.type === 'number' ? 3 : 500}
+                maxLength={currentQ.type === 'number' ? 3 : currentQ.id === 'name' ? 50 : 500}
                 returnKeyType={currentQ.type === 'text' ? 'default' : 'send'}
                 onSubmitEditing={currentQ.type !== 'text' ? sendText : undefined}
               />

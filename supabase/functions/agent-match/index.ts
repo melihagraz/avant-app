@@ -26,37 +26,68 @@ interface AgentVerdict {
   reason: string;
 }
 
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+
 async function callClaude(
   systemPrompt: string,
   messages: { role: "user" | "assistant"; content: string }[],
   model: string
 ): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 500,
-      system: systemPrompt + COMPACT_SYSTEM_SUFFIX,
-      messages,
-    }),
-  });
+  let lastError: Error | null = null;
 
-  const data = await response.json();
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-  if (!response.ok) {
-    throw new Error(`Claude API error ${response.status}: ${JSON.stringify(data)}`);
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 500,
+          system: systemPrompt + COMPACT_SYSTEM_SUFFIX,
+          messages,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      const data = await response.json();
+
+      if (!response.ok) {
+        // 429 (rate limit) veya 5xx hatalarda retry yap
+        if (response.status === 429 || response.status >= 500) {
+          throw new Error(`Claude API error ${response.status}: ${JSON.stringify(data)}`);
+        }
+        // 4xx (client error) hatalarda retry yapma
+        throw new Error(`Claude API client error ${response.status}: ${JSON.stringify(data)}`);
+      }
+
+      if (!data.content || data.content.length === 0) {
+        throw new Error(`Empty content from model ${model}: ${JSON.stringify(data)}`);
+      }
+
+      return data.content[0].text;
+    } catch (err: any) {
+      lastError = err;
+      // Client error'larda retry yapma
+      if (err.message?.includes('client error')) throw err;
+
+      console.warn(`Claude API attempt ${attempt + 1}/${MAX_RETRIES} failed:`, err.message);
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
 
-  if (!data.content || data.content.length === 0) {
-    throw new Error(`Empty content from model ${model}: ${JSON.stringify(data)}`);
-  }
-
-  return data.content[0].text;
+  throw lastError || new Error("callClaude failed after retries");
 }
 
 function parseVerdict(text: string): AgentVerdict | null {

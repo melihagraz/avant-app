@@ -1,5 +1,5 @@
 // screens/ProfileScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
   ScrollView, Image, ActivityIndicator, Alert, Linking, Platform,
@@ -15,6 +15,8 @@ import { supabase } from '../lib/supabase';
 
 const PREMIUM_PRODUCT_ID = 'com.avant.dating.premium.monthly.v1';
 
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
 interface UserProfile {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ interface UserProfile {
   gender: string;
   relationship_type: string;
   photos: string[];
+  is_premium?: boolean;
 }
 
 export default function ProfileScreen({ navigation }: any) {
@@ -31,11 +34,18 @@ export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const iapListenersRef = useRef<{ update?: any; error?: any }>({});
 
   useEffect(() => {
     fetchProfile();
     const unsubscribe = navigation.addListener('focus', fetchProfile);
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      // IAP listener cleanup
+      iapListenersRef.current.update?.remove();
+      iapListenersRef.current.error?.remove();
+      try { endConnection(); } catch {}
+    };
   }, []);
 
   const fetchProfile = async () => {
@@ -69,7 +79,12 @@ export default function ProfileScreen({ navigation }: any) {
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]) {
-      await uploadPhoto(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_PHOTO_SIZE_BYTES) {
+        Alert.alert('Dosya çok büyük', 'Fotoğraf en fazla 5MB olabilir.');
+        return;
+      }
+      await uploadPhoto(asset.uri);
     }
   };
 
@@ -201,9 +216,11 @@ export default function ProfileScreen({ navigation }: any) {
         setPurchasing(false);
         purchaseUpdate.remove();
         purchaseError.remove();
+        iapListenersRef.current = {};
         try { endConnection(); } catch {}
       });
 
+      iapListenersRef.current = { update: purchaseUpdate, error: purchaseError };
       await requestSubscription({ sku: PREMIUM_PRODUCT_ID });
     } catch (err: any) {
       console.error('Purchase error:', err);
@@ -293,19 +310,27 @@ export default function ProfileScreen({ navigation }: any) {
               <Text style={s.premiumIcon}>⚡</Text>
               <Text style={s.premiumTitle}>Avant Premium</Text>
               <Text style={s.premiumDesc}>Sınırsız eşleşme ve öncelikli agent</Text>
-              <Text style={s.premiumPrice}>$9.99 / ay</Text>
-              <Text style={s.premiumDuration}>Aylık otomatik yenilenen abonelik</Text>
-              <TouchableOpacity
-                style={s.premiumBuyBtn}
-                onPress={handlePurchase}
-                disabled={purchasing}
-                activeOpacity={0.85}
-              >
-                {purchasing
-                  ? <ActivityIndicator color="#C084FC" size="small" />
-                  : <Text style={s.premiumBuyTxt}>Abone Ol</Text>
-                }
-              </TouchableOpacity>
+              {profile.is_premium ? (
+                <View style={s.premiumBuyBtn}>
+                  <Text style={[s.premiumBuyTxt, { color: '#10B981' }]}>Premium Aktif</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={s.premiumPrice}>$9.99 / ay</Text>
+                  <Text style={s.premiumDuration}>Aylık otomatik yenilenen abonelik</Text>
+                  <TouchableOpacity
+                    style={s.premiumBuyBtn}
+                    onPress={handlePurchase}
+                    disabled={purchasing}
+                    activeOpacity={0.85}
+                  >
+                    {purchasing
+                      ? <ActivityIndicator color="#C084FC" size="small" />
+                      : <Text style={s.premiumBuyTxt}>Abone Ol</Text>
+                    }
+                  </TouchableOpacity>
+                </>
+              )}
               <Text style={s.premiumLegal}>
                 Ödeme Apple ID hesabınızdan alınır. Abonelik, mevcut dönem bitmeden en az 24 saat önce iptal edilmediği sürece otomatik olarak yenilenir.
               </Text>

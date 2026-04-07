@@ -6,7 +6,12 @@ import {
   Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEMO_EMAIL = Constants.expoConfig?.extra?.demoEmail || 'demo@avant.app';
+const DEMO_PASSWORD = Constants.expoConfig?.extra?.demoPassword || 'AvantDemo2026!';
 
 export default function AuthScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -31,8 +36,8 @@ export default function AuthScreen({ navigation }: any) {
     setError('');
     try {
       const { data, error: err } = await supabase.auth.signInWithPassword({
-        email: 'demo@avant.app',
-        password: 'AvantDemo2026!',
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
       });
       if (err || !data.session) {
         setError('Demo hesabı şu an kullanılamıyor');
@@ -53,7 +58,7 @@ export default function AuthScreen({ navigation }: any) {
   };
 
   const sendOTP = async () => {
-    if (!email.trim() || !email.includes('@')) {
+    if (!email.trim() || !EMAIL_REGEX.test(email.trim())) {
       setError('Geçerli bir email gir');
       return;
     }
@@ -74,8 +79,9 @@ export default function AuthScreen({ navigation }: any) {
     }
   };
 
-  const verifyOTP = async () => {
-    if (code.length !== 8) {
+  const verifyOTP = async (codeOverride?: string) => {
+    const otpCode = codeOverride || code;
+    if (otpCode.length !== 8) {
       setError('8 haneli kodu gir');
       return;
     }
@@ -84,7 +90,7 @@ export default function AuthScreen({ navigation }: any) {
 
     const { data, error: err } = await supabase.auth.verifyOtp({
       email: email.trim().toLowerCase(),
-      token: code,
+      token: otpCode,
       type: 'email',
     });
 
@@ -132,7 +138,15 @@ export default function AuthScreen({ navigation }: any) {
                   ref={codeRef}
                   style={s.otpHidden}
                   value={code}
-                  onChangeText={v => { setCode(v.replace(/\D/g, '').slice(0, 8)); setError(''); }}
+                  onChangeText={v => {
+                    const cleaned = v.replace(/\D/g, '').slice(0, 8);
+                    setCode(cleaned);
+                    setError('');
+                    // 8 hane yapıştırıldığında otomatik doğrula
+                    if (cleaned.length === 8) {
+                      setTimeout(() => verifyOTP(cleaned), 100);
+                    }
+                  }}
                   keyboardType="number-pad"
                   maxLength={8}
                   autoFocus

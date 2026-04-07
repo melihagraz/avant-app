@@ -37,10 +37,18 @@ export default function HomeScreen({ navigation }: any) {
   const [error, setError] = useState(false);
   const [activeTab, setActiveTab] = useState<'matches' | 'messages' | 'profile'>('matches');
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     startPulse();
     init();
+    return () => {
+      // Subscription cleanup
+      unsubscribeRef.current?.();
+      // Pulse animation cleanup
+      pulseAnimRef.current?.stop();
+    };
   }, []);
 
   const init = async () => {
@@ -55,7 +63,9 @@ export default function HomeScreen({ navigation }: any) {
       if (userData) setMyName(userData.name?.[0]?.toUpperCase() || 'M');
 
       await fetchMatches(user.id);
-      subscribeToMatches(user.id);
+      // Önceki subscription'ı temizle
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = subscribeToMatches(user.id);
     } catch (err) {
       console.error('init error:', err);
       setError(true);
@@ -65,60 +75,70 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const startPulse = () => {
-    Animated.loop(
+    const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulseAnimRef.current = animation;
+    animation.start();
   };
 
   const fetchMatches = async (userId: string) => {
     try {
+      // Tek query ile tüm match verilerini join ederek çek (N+1 sorunu çözüldü)
       const { data: matchData, error } = await supabase
         .from('matches')
-        .select('id, created_at, user_a_id, user_b_id, conversation_id')
+        .select(`
+          id, created_at, user_a_id, user_b_id,
+          conversation:conversation_id(agent_a_score, agent_b_score, agent_a_reasoning)
+        `)
         .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
         .order('created_at', { ascending: false });
 
       if (error || !matchData?.length) { setMatches([]); return; }
 
-      const formatted: Match[] = [];
-      for (const m of matchData) {
-        const otherUserId = m.user_a_id === userId ? m.user_b_id : m.user_a_id;
-        const { data: otherUser } = await supabase
-          .from('users').select('id, name, age, city, photos').eq('id', otherUserId).single();
+      // Diğer kullanıcıların ID'lerini topla
+      const otherUserIds = matchData.map(m => m.user_a_id === userId ? m.user_b_id : m.user_a_id);
+      const matchIds = matchData.map(m => m.id);
 
-        let agent_a_score = 0, agent_b_score = 0, agent_a_reasoning = '';
-        if (m.conversation_id) {
-          const { data: conv } = await supabase
-            .from('agent_conversations')
-            .select('agent_a_score, agent_b_score, agent_a_reasoning')
-            .eq('id', m.conversation_id).single();
-          if (conv) {
-            agent_a_score = conv.agent_a_score || 0;
-            agent_b_score = conv.agent_b_score || 0;
-            agent_a_reasoning = conv.agent_a_reasoning || '';
-          }
+      // Paralel: kullanıcı bilgileri + son mesajlar
+      const [usersResult, messagesResult] = await Promise.all([
+        supabase.from('users').select('id, name, age, city, photos').in('id', otherUserIds),
+        supabase.from('human_messages').select('match_id, content, created_at')
+          .in('match_id', matchIds).order('created_at', { ascending: false }),
+      ]);
+
+      const usersMap = new Map((usersResult.data || []).map(u => [u.id, u]));
+
+      // Her match için son mesajı bul
+      const lastMessageMap = new Map<string, { content: string; created_at: string }>();
+      for (const msg of (messagesResult.data || [])) {
+        if (!lastMessageMap.has(msg.match_id)) {
+          lastMessageMap.set(msg.match_id, msg);
         }
+      }
 
-        const { data: msgs } = await supabase
-          .from('human_messages')
-          .select('content, created_at')
-          .eq('match_id', m.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
+      const formatted: Match[] = matchData.map(m => {
+        const otherUserId = m.user_a_id === userId ? m.user_b_id : m.user_a_id;
+        const otherUser = usersMap.get(otherUserId) || { id: otherUserId, name: 'Kullanıcı', age: 0, city: '', photos: [] };
+        const conv = m.conversation as any;
+        const lastMsg = lastMessageMap.get(m.id);
 
-        formatted.push({
+        return {
           id: m.id,
           created_at: m.created_at,
-          other_user: otherUser || { id: otherUserId, name: 'Kullanıcı', age: 0, city: '', photos: [] },
-          agent_a_score, agent_b_score, agent_a_reasoning,
-          has_messages: (msgs?.length || 0) > 0,
-          last_message: msgs?.[0]?.content,
-          last_message_at: msgs?.[0]?.created_at,
-        });
-      }
+          other_user: otherUser,
+          agent_a_score: conv?.agent_a_score || 0,
+          agent_b_score: conv?.agent_b_score || 0,
+          agent_a_reasoning: conv?.agent_a_reasoning || '',
+          has_messages: !!lastMsg,
+          last_message: lastMsg?.content,
+          last_message_at: lastMsg?.created_at,
+        };
+      });
+
       setMatches(formatted);
     } catch (err) {
       console.error('fetchMatches error:', err);
@@ -367,7 +387,7 @@ const s = StyleSheet.create({
   avatarBtn: { borderRadius: 22, overflow: 'hidden' },
   avatarGrad: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  scroll: { paddingBottom: 24 },
+  scroll: { paddingBottom: 100 },
   pillRow: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 6 },
   pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#fff', borderRadius: 28, paddingHorizontal: 16, paddingVertical: 10, gap: 10, shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 },
   pillDotWrap: { width: 12, height: 12, alignItems: 'center', justifyContent: 'center' },
