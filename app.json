@@ -1,30 +1,64 @@
 {
   "expo": {
     "name": "avant",
+    "scheme": "avant",
     "slug": "avant",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFF0F5"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.avant.dating",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Avant uses your photo library to let you select profile photos that other users will see on your dating profile. For example, you can choose up to 6 photos from your gallery to showcase yourself.",
+        "NSCameraUsageDescription": "Avant uses the camera to let you take a new photo for your dating profile. For example, you can snap a selfie to use as your main profile picture.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.avant.dating",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#D85A30"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Avant uses your photo library to let you select profile photos that other users will see on your dating profile. For example, you can choose up to 6 photos from your gallery to showcase yourself."
+        }
+      ]
+    ],
+    "owner": "melihagraz4",
+    "extra": {
+      "eas": {
+        "projectId": "997d2e6d-f39d-4138-bbb6-031a8b72af54"
+      }
     }
   }
 }
