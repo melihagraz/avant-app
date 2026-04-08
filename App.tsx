@@ -1,11 +1,18 @@
 // App.tsx
 import 'react-native-url-polyfill/auto';
-import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useState, useRef } from 'react';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Linking, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Linking, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { supabase } from './lib/supabase';
 import { registerForPushNotifications, savePushToken } from './lib/notifications';
+import { ThemeProvider, useTheme } from './lib/theme';
+import { initSentry, setSentryUser, Sentry } from './lib/sentry';
+import { setAnalyticsUser, trackEvent, trackScreen } from './lib/analytics';
+import './lib/i18n';
+import { useTranslation } from 'react-i18next';
+import { useOnlineStatus } from './lib/offline';
+import { processSyncQueue } from './lib/syncQueue';
 
 import AuthScreen from './screens/AuthScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -15,14 +22,33 @@ import HumanChatScreen from './screens/HumanChatScreen';
 import AgentLogScreen from './screens/AgentLogScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
+// Sentry'yi uygulama yüklenmeden önce başlat
+initSentry();
+
 const Stack = createNativeStackNavigator();
 
-export default function App() {
+function AppContent() {
   const [session, setSession] = useState<any>(null);
   const [hasAgent, setHasAgent] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigationRef = useRef<any>(null);
+  const routeNameRef = useRef<string | undefined>(undefined);
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+  const isOnline = useOnlineStatus();
+  const wasOffline = useRef(false);
+
+  // Bağlantı geldiğinde bekleyen mesajları gönder
+  useEffect(() => {
+    if (isOnline && wasOffline.current) {
+      processSyncQueue();
+    }
+    wasOffline.current = !isOnline;
+  }, [isOnline]);
 
   useEffect(() => {
+    trackEvent('app_open');
+
     const handleDeepLink = async (url: string) => {
       if (url && url.includes('access_token')) {
         const params = new URLSearchParams(url.split('#')[1] || url.split('?')[1]);
@@ -52,8 +78,11 @@ export default function App() {
       clearTimeout(timeout);
       setSession(session);
       if (session) {
-        checkAgent(session.user.id);
-        setupPushToken(session.user.id);
+        const userId = session.user.id;
+        setAnalyticsUser(userId);
+        setSentryUser(userId);
+        checkAgent(userId);
+        setupPushToken(userId);
       } else {
         setLoading(false);
       }
@@ -65,9 +94,14 @@ export default function App() {
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        checkAgent(session.user.id);
-        setupPushToken(session.user.id);
+        const userId = session.user.id;
+        setAnalyticsUser(userId);
+        setSentryUser(userId);
+        checkAgent(userId);
+        setupPushToken(userId);
       } else {
+        setAnalyticsUser(null);
+        setSentryUser(null);
         setHasAgent(null);
         setLoading(false);
       }
@@ -88,7 +122,6 @@ export default function App() {
         .single();
       setHasAgent(!!data);
 
-      // Agent varsa start-match sessizce çalıştır — yeni kullanıcıları bulsun
       if (data) {
         supabase.functions.invoke('start-match', {
           body: { user_id: userId },
@@ -112,8 +145,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <View style={loadingStyles.container}>
-        <ActivityIndicator size="large" color="#C084FC" />
+      <View style={[loadingStyles.container, { backgroundColor: colors.loadingBg }]}>
+        <ActivityIndicator size="large" color={colors.accentPurple} />
       </View>
     );
   }
@@ -121,7 +154,25 @@ export default function App() {
   const initialRoute = !session ? 'Auth' : hasAgent ? 'Home' : 'Welcome';
 
   return (
-    <NavigationContainer>
+    <View style={{ flex: 1 }}>
+      {!isOnline && (
+        <View style={[loadingStyles.offlineBanner, { backgroundColor: colors.accentPink }]}>
+          <Text style={loadingStyles.offlineText}>{t('common.offline')}</Text>
+        </View>
+      )}
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+      }}
+      onStateChange={() => {
+        const currentRouteName = navigationRef.current?.getCurrentRoute()?.name;
+        if (currentRouteName && currentRouteName !== routeNameRef.current) {
+          trackScreen(currentRouteName);
+          routeNameRef.current = currentRouteName;
+        }
+      }}
+    >
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
@@ -135,14 +186,33 @@ export default function App() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
   );
 }
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+export default Sentry.wrap(App);
 
 const loadingStyles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF0F5',
+  },
+  offlineBanner: {
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  offlineText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

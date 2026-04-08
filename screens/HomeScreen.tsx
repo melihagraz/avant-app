@@ -7,6 +7,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../lib/theme';
+import { trackEvent } from '../lib/analytics';
+import { captureError } from '../lib/sentry';
+import { useTranslation } from 'react-i18next';
+import { cacheMatches, getCachedMatches, useOnlineStatus } from '../lib/offline';
 
 interface Match {
   id: string;
@@ -20,15 +25,9 @@ interface Match {
   last_message_at?: string;
 }
 
-const PHOTO_COLORS = [
-  { bg: '#FFE0EB', text: '#FF6B9D' },
-  { bg: '#E8DEFF', text: '#7C3AED' },
-  { bg: '#D6F5E8', text: '#10B981' },
-  { bg: '#FFE4D6', text: '#F97316' },
-  { bg: '#DBEAFE', text: '#3B82F6' },
-];
-
 export default function HomeScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
   const [matches, setMatches] = useState<Match[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [myUserId, setMyUserId] = useState('');
@@ -53,6 +52,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const init = async () => {
     try {
+      trackEvent('app_home_load');
       const { data: sessionData } = await supabase.auth.getSession();
       const user = sessionData?.session?.user;
       if (!user) { setLoading(false); return; }
@@ -68,6 +68,7 @@ export default function HomeScreen({ navigation }: any) {
       unsubscribeRef.current = subscribeToMatches(user.id);
     } catch (err) {
       console.error('init error:', err);
+      captureError(err, { context: 'home_init' });
       setError(true);
     } finally {
       setLoading(false);
@@ -140,8 +141,12 @@ export default function HomeScreen({ navigation }: any) {
       });
 
       setMatches(formatted);
+      cacheMatches(userId, formatted);
     } catch (err) {
-      console.error('fetchMatches error:', err);
+      captureError(err, { context: 'fetch_matches' });
+      // Offline fallback
+      const cached = await getCachedMatches(userId);
+      if (cached.length > 0) setMatches(cached);
     }
   };
 
@@ -167,16 +172,16 @@ export default function HomeScreen({ navigation }: any) {
 
   const renderMatchCard = (match: Match, idx: number) => {
     const score = avgScore(match);
-    const color = PHOTO_COLORS[idx % PHOTO_COLORS.length];
+    const color = colors.photoPlaceholders[idx % colors.photoPlaceholders.length];
     const hasPhoto = match.other_user?.photos?.length > 0;
 
     return (
-      <View key={match.id} style={s.card}>
+      <View key={match.id} style={[s.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
         <View style={s.photoWrap}>
           {hasPhoto ? (
             <Image source={{ uri: match.other_user.photos[0] }} style={s.photo} resizeMode="cover" />
           ) : (
-            <LinearGradient colors={['#FF6B9D', '#C084FC', '#818CF8']} style={s.photoPlaceholder} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <LinearGradient colors={colors.accentGradient as any} style={s.photoPlaceholder} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <View style={s.silhouetteCircle}>
                 <Ionicons name="person" size={64} color="rgba(255,255,255,0.5)" />
               </View>
@@ -193,35 +198,42 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </LinearGradient>
           <View style={s.scoreBadge}>
-            <LinearGradient colors={['#FF6B9D', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.scoreBadgeInner}>
+            <LinearGradient colors={colors.accentGradientAlt as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.scoreBadgeInner}>
               <Text style={s.scoreNum}>{score}</Text>
-              <Text style={s.scoreLbl}>uyum</Text>
+              <Text style={s.scoreLbl}>{t('home.compatibility')}</Text>
             </LinearGradient>
           </View>
         </View>
 
         <View style={s.cardBody}>
           {match.agent_a_reasoning ? (
-            <View style={s.reasonCard}>
-              <Text style={s.reasonTxt} numberOfLines={2}>
-                <Text style={s.reasonLabel}>🤖 Agentın: </Text>
+            <View style={[s.reasonCard, { backgroundColor: colors.inputBg }]}>
+              <Text style={[s.reasonTxt, { color: colors.textMuted }]} numberOfLines={2}>
+                <Text style={[s.reasonLabel, { color: colors.userBubble }]}>{t('home.agentSays')}</Text>
                 "{match.agent_a_reasoning}"
               </Text>
             </View>
           ) : null}
           <View style={s.actions}>
-            <TouchableOpacity style={s.btnPass} onPress={() => setDismissed(prev => [...prev, match.id])}>
-              <Text style={s.btnPassTxt}>Geç</Text>
+            <TouchableOpacity
+              style={[s.btnPass, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => {
+                trackEvent('match_dismiss', { match_id: match.id });
+                setDismissed(prev => [...prev, match.id]);
+              }}
+            >
+              <Text style={[s.btnPassTxt, { color: colors.textSecondary }]}>{t('home.pass')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.btnChat}
               onPress={() => {
+                trackEvent('chat_start', { match_id: match.id });
                 navigation.navigate('HumanChat', { matchId: match.id, otherUser: match.other_user });
                 setActiveTab('messages');
               }}
             >
-              <LinearGradient colors={['#FF6B9D', '#C084FC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.btnChatGrad}>
-                <Text style={s.btnChatTxt}>Konuşmayı başlat 💬</Text>
+              <LinearGradient colors={colors.accentGradientAlt as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.btnChatGrad}>
+                <Text style={s.btnChatTxt}>{t('home.startChat')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -231,13 +243,13 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const renderChatRow = (match: Match, idx: number) => {
-    const color = PHOTO_COLORS[idx % PHOTO_COLORS.length];
+    const color = colors.photoPlaceholders[idx % colors.photoPlaceholders.length];
     const hasPhoto = match.other_user?.photos?.length > 0;
 
     return (
       <TouchableOpacity
         key={match.id}
-        style={s.chatRow}
+        style={[s.chatRow, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
         onPress={() => navigation.navigate('HumanChat', { matchId: match.id, otherUser: match.other_user })}
         activeOpacity={0.7}
       >
@@ -251,23 +263,23 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
         <View style={s.chatInfo}>
-          <Text style={s.chatName}>{match.other_user?.name}</Text>
-          <Text style={s.chatLastMsg} numberOfLines={1}>
-            {match.last_message || 'Agentların eşleşti — ilk mesajı sen gönder'}
+          <Text style={[s.chatName, { color: colors.textPrimary }]}>{match.other_user?.name}</Text>
+          <Text style={[s.chatLastMsg, { color: colors.textSecondary }]} numberOfLines={1}>
+            {match.last_message || t('home.defaultChatHint')}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#D4C8E0" />
+        <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
       </TouchableOpacity>
     );
   };
 
   return (
-    <LinearGradient colors={['#FFF8FA', '#F8F5FF', '#F5FAFF']} style={s.container} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <LinearGradient colors={colors.bgGradient as any} style={s.container} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <SafeAreaView style={s.safeArea}>
         <View style={s.header}>
-          <Text style={s.logo}>av<Text style={s.logoAccent}>a</Text>nt</Text>
+          <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.logoAccent, { color: colors.accentPink }]}>a</Text>nt</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarBtn}>
-            <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.avatarGrad}>
+            <LinearGradient colors={colors.accentGradientAlt as any} style={s.avatarGrad}>
               <Text style={s.avatarTxt}>{myName || 'M'}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -277,37 +289,37 @@ export default function HomeScreen({ navigation }: any) {
           {activeTab === 'matches' && (
             <>
               <View style={s.pillRow}>
-                <View style={s.pill}>
+                <View style={[s.pill, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
                   <View style={s.pillDotWrap}>
                     <Animated.View style={[s.pillDotRing, { transform: [{ scale: pulseScale }], opacity: pulseOpacity }]} />
                     <View style={s.pillDot} />
                   </View>
-                  <Text style={s.pillTxt}>Agentın aktif</Text>
+                  <Text style={[s.pillTxt, { color: colors.textPrimary }]}>{t('home.agentActive')}</Text>
                   {newMatches.length > 0 && (
                     <View style={s.pillBadge}>
-                      <Text style={s.pillBadgeTxt}>{newMatches.length} yeni 🎉</Text>
+                      <Text style={s.pillBadgeTxt}>{t('home.newCount', { count: newMatches.length })}</Text>
                     </View>
                   )}
                 </View>
               </View>
 
               {loading ? (
-                <View style={s.emptyState}>
-                  <Text style={s.emptySub}>Yükleniyor...</Text>
+                <View style={[s.emptyState, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                  <Text style={[s.emptySub, { color: colors.textSecondary }]}>{t('common.loading')}</Text>
                 </View>
               ) : error ? (
-                <View style={s.emptyState}>
-                  <Text style={s.emptyTitle}>Bir hata oluştu</Text>
-                  <Text style={s.emptySub}>Veriler yüklenemedi. Tekrar dene.</Text>
+                <View style={[s.emptyState, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                  <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>{t('home.errorTitle')}</Text>
+                  <Text style={[s.emptySub, { color: colors.textSecondary }]}>{t('home.errorSub')}</Text>
                   <TouchableOpacity onPress={() => { setError(false); setLoading(true); init(); }}>
-                    <Text style={{ color: '#FF6B9D', marginTop: 10, fontSize: 15, fontWeight: '700' }}>Tekrar dene</Text>
+                    <Text style={{ color: colors.accentPink, marginTop: 10, fontSize: 15, fontWeight: '700' }}>{t('common.retry')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : newMatches.length === 0 ? (
-                <View style={s.emptyState}>
+                <View style={[s.emptyState, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
                   <Text style={s.emptyEmoji}>🤖</Text>
-                  <Text style={s.emptyTitle}>Agentın çalışıyor</Text>
-                  <Text style={s.emptySub}>İlk eşleşmen yakında gelecek ✨</Text>
+                  <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>{t('home.emptyTitle')}</Text>
+                  <Text style={[s.emptySub, { color: colors.textSecondary }]}>{t('home.emptySub')}</Text>
                 </View>
               ) : (
                 newMatches.map((m, i) => renderMatchCard(m, i))
@@ -318,13 +330,13 @@ export default function HomeScreen({ navigation }: any) {
           {activeTab === 'messages' && (
             <>
               <View style={s.sectionHdr}>
-                <Text style={s.sectionTitle}>Mesajlar 💬</Text>
+                <Text style={[s.sectionTitle, { color: colors.textPrimary }]}>{t('home.messagesTitle')}</Text>
               </View>
               {activeChats.length === 0 ? (
-                <View style={s.emptyState}>
+                <View style={[s.emptyState, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
                   <Text style={s.emptyEmoji}>✉️</Text>
-                  <Text style={s.emptyTitle}>Henüz mesaj yok</Text>
-                  <Text style={s.emptySub}>Eşleşmeler sekmesinden konuşma başlat.</Text>
+                  <Text style={[s.emptyTitle, { color: colors.textPrimary }]}>{t('home.noMessages')}</Text>
+                  <Text style={[s.emptySub, { color: colors.textSecondary }]}>{t('home.noMessagesSub')}</Text>
                 </View>
               ) : (
                 <View style={s.chatList}>
@@ -335,11 +347,11 @@ export default function HomeScreen({ navigation }: any) {
           )}
         </ScrollView>
 
-        <View style={s.tabBar}>
+        <View style={[s.tabBar, { backgroundColor: colors.card, borderTopColor: colors.separator }]}>
           {([
-            { key: 'matches', label: 'Eşleşmeler', icon: 'heart' as const, iconOutline: 'heart-outline' as const, badge: newMatches.length },
-            { key: 'messages', label: 'Mesajlar', icon: 'chatbubble' as const, iconOutline: 'chatbubble-outline' as const, badge: activeChats.length },
-            { key: 'profile', label: 'Profil', icon: 'person' as const, iconOutline: 'person-outline' as const, badge: 0 },
+            { key: 'matches', label: t('home.tabMatches'), icon: 'heart' as const, iconOutline: 'heart-outline' as const, badge: newMatches.length },
+            { key: 'messages', label: t('home.tabMessages'), icon: 'chatbubble' as const, iconOutline: 'chatbubble-outline' as const, badge: activeChats.length },
+            { key: 'profile', label: t('home.tabProfile'), icon: 'person' as const, iconOutline: 'person-outline' as const, badge: 0 },
           ]).map(tab => {
             const isActive = activeTab === tab.key;
             return (
@@ -351,6 +363,7 @@ export default function HomeScreen({ navigation }: any) {
                     setActiveTab('profile');
                     navigation.navigate('Profile');
                   } else {
+                    trackEvent('tab_change', { tab: tab.key });
                     setActiveTab(tab.key as any);
                   }
                 }}
@@ -359,7 +372,7 @@ export default function HomeScreen({ navigation }: any) {
                   <Ionicons
                     name={isActive ? tab.icon : tab.iconOutline}
                     size={24}
-                    color={isActive ? '#FF6B9D' : '#C4B5D0'}
+                    color={isActive ? colors.accentPink : colors.tabInactive}
                   />
                   {tab.badge > 0 && (
                     <View style={s.tabBadge}>
@@ -367,7 +380,7 @@ export default function HomeScreen({ navigation }: any) {
                     </View>
                   )}
                 </View>
-                <Text style={[s.tabLbl, isActive && s.tabLblActive]}>{tab.label}</Text>
+                <Text style={[s.tabLbl, { color: colors.tabInactive }, isActive && s.tabLblActive, isActive && { color: colors.accentPink }]}>{tab.label}</Text>
                 {isActive && <View style={s.tabLine} />}
               </TouchableOpacity>
             );

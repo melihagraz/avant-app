@@ -7,13 +7,20 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../lib/theme';
+import { trackEvent } from '../lib/analytics';
+import { captureError } from '../lib/sentry';
+import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEMO_EMAIL = Constants.expoConfig?.extra?.demoEmail || 'demo@avant.app';
 const DEMO_PASSWORD = Constants.expoConfig?.extra?.demoPassword || 'AvantDemo2026!';
 
 export default function AuthScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -32,6 +39,7 @@ export default function AuthScreen({ navigation }: any) {
   }, []);
 
   const demoLogin = async () => {
+    trackEvent('login_start', { method: 'demo' });
     setLoading(true);
     setError('');
     try {
@@ -40,7 +48,7 @@ export default function AuthScreen({ navigation }: any) {
         password: DEMO_PASSWORD,
       });
       if (err || !data.session) {
-        setError('Demo hesabı şu an kullanılamıyor');
+        setError(t('auth.demoUnavailable'));
         setLoading(false);
         return;
       }
@@ -49,17 +57,28 @@ export default function AuthScreen({ navigation }: any) {
         .select('id')
         .eq('user_id', data.session.user.id)
         .single();
+      trackEvent('login_success');
       navigation.replace(agent ? 'Home' : 'Welcome');
-    } catch {
-      setError('Demo hesabı şu an kullanılamıyor');
+    } catch (e) {
+      captureError(e);
+      setError(t('auth.demoUnavailable'));
     } finally {
       setLoading(false);
     }
   };
 
   const sendOTP = async () => {
+    trackEvent('login_start', { method: 'otp' });
+
+    // Rate limit: 3 OTP / 5 dakika
+    if (!canPerformAction('otp_send', 3, 300000)) {
+      const remaining = getRemainingCooldown('otp_send', 3, 300000);
+      setError(t('moderation.rateLimited', { seconds: remaining }));
+      return;
+    }
+
     if (!email.trim() || !EMAIL_REGEX.test(email.trim())) {
-      setError('Geçerli bir email gir');
+      setError(t('auth.invalidEmail'));
       return;
     }
     setLoading(true);
@@ -72,7 +91,7 @@ export default function AuthScreen({ navigation }: any) {
 
     setLoading(false);
     if (err) {
-      setError('Bir hata oluştu, tekrar dene');
+      setError(t('auth.genericError'));
     } else {
       setSent(true);
       setTimeout(() => codeRef.current?.focus(), 300);
@@ -81,8 +100,16 @@ export default function AuthScreen({ navigation }: any) {
 
   const verifyOTP = async (codeOverride?: string) => {
     const otpCode = codeOverride || code;
+
+    // Rate limit: 5 doğrulama / 5 dakika
+    if (!canPerformAction('otp_verify', 5, 300000)) {
+      const remaining = getRemainingCooldown('otp_verify', 5, 300000);
+      setError(t('moderation.rateLimited', { seconds: remaining }));
+      return;
+    }
+
     if (otpCode.length !== 8) {
-      setError('8 haneli kodu gir');
+      setError(t('auth.codeInvalid'));
       return;
     }
     setVerifying(true);
@@ -97,7 +124,7 @@ export default function AuthScreen({ navigation }: any) {
     setVerifying(false);
 
     if (err || !data.session) {
-      setError('Kod hatalı veya süresi dolmuş');
+      setError(t('auth.codeWrong'));
       return;
     }
 
@@ -107,30 +134,40 @@ export default function AuthScreen({ navigation }: any) {
       .eq('user_id', data.session.user.id)
       .single();
 
+    trackEvent('login_success');
     navigation.replace(agent ? 'Home' : 'Onboarding');
   };
 
   if (sent) {
     return (
-      <LinearGradient colors={['#FFF0F5', '#FDE8EF', '#F0E6FF', '#E8F4FD']} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+      <LinearGradient colors={colors.authGradient as any} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <SafeAreaView style={s.container}>
           <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <Animated.View style={[s.inner, { opacity: fadeAnim, transform: [{ scale: bounceAnim }] }]}>
               <View style={s.top}>
-                <Text style={s.logo}>av<Text style={s.logoAccent}>a</Text>nt</Text>
+                <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.logoAccent, { color: colors.accentPink }]}>a</Text>nt</Text>
                 <Text style={s.sparkle}>✨</Text>
               </View>
 
-              <View style={s.card}>
-                <Text style={s.cardTitle}>Kodu gir</Text>
-                <Text style={s.cardSub}>
-                  <Text style={s.bold}>{email}</Text> adresine 8 haneli doğrulama kodu gönderdik.
+              <View style={[s.card, { backgroundColor: colors.card }]}>
+                <Text style={[s.cardTitle, { color: colors.textPrimary }]}>{t('auth.enterCode')}</Text>
+                <Text style={[s.cardSub, { color: colors.textSecondary }]}>
+                  {t('auth.codeSent', { email })}
                 </Text>
 
                 <TouchableOpacity activeOpacity={0.9} onPress={() => codeRef.current?.focus()} style={s.otpRow}>
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <View key={i} style={[s.otpBox, i < code.length && s.otpBoxFilled, error ? s.otpBoxErr : null]}>
-                      <Text style={[s.otpDigit, i < code.length && s.otpDigitFilled]}>{code[i] || ''}</Text>
+                    <View key={i} style={[
+                      s.otpBox,
+                      { backgroundColor: colors.inputBg, borderColor: colors.border },
+                      i < code.length && [s.otpBoxFilled, { borderColor: colors.accentPurple, backgroundColor: colors.inputBg }],
+                      error ? s.otpBoxErr : null,
+                    ]}>
+                      <Text style={[
+                        s.otpDigit,
+                        { color: colors.placeholder },
+                        i < code.length && [s.otpDigitFilled, { color: colors.userBubble }],
+                      ]}>{code[i] || ''}</Text>
                     </View>
                   ))}
                 </TouchableOpacity>
@@ -152,7 +189,7 @@ export default function AuthScreen({ navigation }: any) {
                   autoFocus
                   caretHidden
                 />
-                {error ? <Text style={s.errTxt}>{error}</Text> : null}
+                {error ? <Text style={[s.errTxt, { color: colors.error }]}>{error}</Text> : null}
 
                 <TouchableOpacity
                   style={[s.btn, (code.length !== 8 || verifying) && s.btnOff]}
@@ -161,24 +198,24 @@ export default function AuthScreen({ navigation }: any) {
                   activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={(code.length !== 8 || verifying) ? ['#E0D0E8', '#D8C8E0'] : ['#FF6B9D', '#C084FC', '#818CF8']}
+                    colors={(code.length !== 8 || verifying) ? colors.disabledGradient as any : colors.accentGradient as any}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={s.btnGrad}
                   >
                     {verifying
                       ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={s.btnTxt}>Giriş yap 🎉</Text>
+                      : <Text style={s.btnTxt}>{t('auth.loginBtn')}</Text>
                     }
                   </LinearGradient>
                 </TouchableOpacity>
 
                 <View style={s.retryRow}>
                   <TouchableOpacity style={s.retryBtn} onPress={() => { setSent(false); setCode(''); setError(''); }}>
-                    <Text style={s.retryTxt}>Farklı email dene</Text>
+                    <Text style={[s.retryTxt, { color: colors.textSecondary }]}>{t('auth.tryDifferent')}</Text>
                   </TouchableOpacity>
-                  <Text style={s.retryDot}>·</Text>
+                  <Text style={[s.retryDot, { color: colors.chevron }]}>·</Text>
                   <TouchableOpacity style={s.retryBtn} onPress={sendOTP}>
-                    <Text style={s.retryTxt}>Tekrar gönder</Text>
+                    <Text style={[s.retryTxt, { color: colors.textSecondary }]}>{t('auth.resend')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -190,31 +227,31 @@ export default function AuthScreen({ navigation }: any) {
   }
 
   return (
-    <LinearGradient colors={['#FFF0F5', '#FDE8EF', '#F0E6FF', '#E8F4FD']} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <LinearGradient colors={colors.authGradient as any} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <SafeAreaView style={s.container}>
         <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Animated.View style={[s.inner, { opacity: fadeAnim, transform: [{ scale: bounceAnim }] }]}>
             <View style={s.top}>
-              <Text style={s.logo}>av<Text style={s.logoAccent}>a</Text>nt</Text>
+              <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.logoAccent, { color: colors.accentPink }]}>a</Text>nt</Text>
               <Text style={s.sparkle}>✨</Text>
-              <Text style={s.tagline}>agentin önce buluşur</Text>
+              <Text style={[s.tagline, { color: colors.textSecondary }]}>{t('auth.tagline')}</Text>
             </View>
 
-            <View style={s.card}>
-              <Text style={s.cardLabel}>Email adresin</Text>
+            <View style={[s.card, { backgroundColor: colors.card }]}>
+              <Text style={[s.cardLabel, { color: colors.textSecondary }]}>{t('auth.emailLabel')}</Text>
               <TextInput
-                style={[s.input, error ? s.inputErr : null]}
+                style={[s.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }, error ? s.inputErr : null]}
                 value={email}
                 onChangeText={v => { setEmail(v); setError(''); }}
-                placeholder="ornek@email.com"
-                placeholderTextColor="#C4B5D0"
+                placeholder={t('auth.emailPlaceholder')}
+                placeholderTextColor={colors.placeholder}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="send"
                 onSubmitEditing={sendOTP}
               />
-              {error ? <Text style={s.errTxt}>{error}</Text> : null}
+              {error ? <Text style={[s.errTxt, { color: colors.error }]}>{error}</Text> : null}
 
               <TouchableOpacity
                 style={s.btn}
@@ -223,30 +260,30 @@ export default function AuthScreen({ navigation }: any) {
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={['#FF6B9D', '#C084FC', '#818CF8']}
+                  colors={colors.accentGradient as any}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={s.btnGrad}
                 >
                   {loading
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={s.btnTxt}>Devam et →</Text>
+                    : <Text style={s.btnTxt}>{t('auth.continueBtn')}</Text>
                   }
                 </LinearGradient>
               </TouchableOpacity>
 
-              <Text style={s.hint}>
-                Emailine 8 haneli doğrulama kodu göndereceğiz 💌
+              <Text style={[s.hint, { color: colors.textHint }]}>
+                {t('auth.emailHint')}
               </Text>
 
               <TouchableOpacity
-                style={s.demoBtn}
+                style={[s.demoBtn, { borderTopColor: colors.border }]}
                 onPress={demoLogin}
                 disabled={loading}
                 activeOpacity={0.7}
               >
                 {loading
                   ? <ActivityIndicator color="#9B8AB8" size="small" />
-                  : <Text style={s.demoTxt}>Demo ile giriş yap</Text>
+                  : <Text style={[s.demoTxt, { color: colors.textSecondary }]}>{t('auth.demoLogin')}</Text>
                 }
               </TouchableOpacity>
             </View>

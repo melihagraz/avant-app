@@ -6,7 +6,7 @@
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
@@ -52,12 +52,14 @@
         {
           "photosPermission": "Avant uses your photo library to let you select profile photos that other users will see on your dating profile. For example, you can choose up to 6 photos from your gallery to showcase yourself."
         }
-      ]
+      ],
+      "@sentry/react-native/expo"
     ],
     "owner": "melihagraz4",
     "extra": {
       "supabaseUrl": "https://ertyxalazqtmdowjdzsq.supabase.co",
       "supabaseAnonKey": "sb_publishable_MYoZp-UGpXA8s4JzutonGQ_YUOr2-FB",
+      "sentryDsn": "",
       "eas": {
         "projectId": "997d2e6d-f39d-4138-bbb6-031a8b72af54"
       }

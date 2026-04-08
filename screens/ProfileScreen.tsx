@@ -11,7 +11,13 @@ import {
   finishTransaction, endConnection, purchaseUpdatedListener,
   purchaseErrorListener, type SubscriptionPurchase,
 } from 'react-native-iap';
+import { useTranslation } from 'react-i18next';
+import { cacheProfile, getCachedProfile } from '../lib/offline';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../lib/theme';
+import { trackEvent } from '../lib/analytics';
+import { captureError } from '../lib/sentry';
+import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
 
 const PREMIUM_PRODUCT_ID = 'com.avant.dating.premium.monthly.v1';
 
@@ -29,6 +35,8 @@ interface UserProfile {
 }
 
 export default function ProfileScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -58,18 +66,36 @@ export default function ProfileScreen({ navigation }: any) {
       const { data, error } = await supabase
         .from('users').select('*').eq('id', user.id).single();
       if (error) console.error('Profile fetch error:', error);
-      if (data) setProfile(data);
+      if (data) {
+        setProfile(data);
+        cacheProfile(user.id, data);
+        trackEvent('profile_view');
+      }
     } catch (err) {
-      console.error('fetchProfile error:', err);
+      captureError(err, { context: 'fetch_profile' });
+      // Offline fallback
+      const { data: sessionData2 } = await supabase.auth.getSession();
+      const uid = sessionData2?.session?.user?.id;
+      if (uid) {
+        const cached = await getCachedProfile(uid);
+        if (cached) setProfile(cached);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const pickImage = async () => {
+    // Rate limit: 5 yükleme / 5 dakika
+    if (!canPerformAction('photo_upload', 5, 300000)) {
+      const remaining = getRemainingCooldown('photo_upload', 5, 300000);
+      Alert.alert(t('common.error'), t('moderation.rateLimited', { seconds: remaining }));
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('İzin gerekli', 'Fotoğraf seçmek için galeri iznine ihtiyaç var.');
+      Alert.alert(t('common.permissionNeeded'), t('common.galleryPermission'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -81,9 +107,10 @@ export default function ProfileScreen({ navigation }: any) {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_PHOTO_SIZE_BYTES) {
-        Alert.alert('Dosya çok büyük', 'Fotoğraf en fazla 5MB olabilir.');
+        Alert.alert(t('common.photoTooBig'), t('common.photoTooBigDesc'));
         return;
       }
+      trackEvent('photo_upload', { screen: 'profile' });
       await uploadPhoto(asset.uri);
     }
   };
@@ -110,9 +137,10 @@ export default function ProfileScreen({ navigation }: any) {
 
       await supabase.from('users').update({ photos: newPhotos }).eq('id', user.id);
       setProfile(prev => prev ? { ...prev, photos: newPhotos } : null);
-      Alert.alert('Başarılı', 'Fotoğrafın yüklendi!');
+      Alert.alert(t('common.success'), t('profile.photoUploaded'));
     } catch (err: any) {
-      Alert.alert('Hata', err?.message || 'Fotoğraf yüklenirken sorun oluştu.');
+      captureError(err, { context: 'upload_photo' });
+      Alert.alert(t('common.error'), err?.message || t('profile.photoUploadError'));
     } finally {
       setUploading(false);
     }
@@ -141,15 +169,18 @@ export default function ProfileScreen({ navigation }: any) {
 
   const deleteAccount = () => {
     if (typeof window !== 'undefined' && window.confirm) {
-      const confirmed = window.confirm('Tüm verileriniz kalıcı olarak silinecek. Bu işlem geri alınamaz.');
-      if (confirmed) confirmDeleteAccount();
+      const confirmed = window.confirm(t('profile.deleteConfirm'));
+      if (confirmed) {
+        trackEvent('account_delete');
+        confirmDeleteAccount();
+      }
     } else {
       Alert.alert(
-        'Hesabı Sil',
-        'Tüm verileriniz kalıcı olarak silinecek. Bu işlem geri alınamaz.',
+        t('profile.deleteAccount'),
+        t('profile.deleteConfirm'),
         [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Sil', style: 'destructive', onPress: confirmDeleteAccount },
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('common.delete'), style: 'destructive', onPress: () => { trackEvent('account_delete'); confirmDeleteAccount(); } },
         ]
       );
     }
@@ -172,7 +203,8 @@ export default function ProfileScreen({ navigation }: any) {
       navigation.replace('Auth');
     } catch (err: any) {
       console.error('Delete account error:', err);
-      Alert.alert('Hata', 'Hesap silinirken sorun oluştu. Tekrar dene.');
+      captureError(err, { context: 'delete_account' });
+      Alert.alert(t('common.error'), t('profile.deleteError'));
     } finally {
       setDeleting(false);
     }
@@ -180,12 +212,13 @@ export default function ProfileScreen({ navigation }: any) {
 
   const handlePurchase = async () => {
     setPurchasing(true);
+    trackEvent('premium_tap');
     try {
       await initConnection();
 
       const subscriptions = await getSubscriptions({ skus: [PREMIUM_PRODUCT_ID] });
       if (!subscriptions || subscriptions.length === 0) {
-        Alert.alert('Hata', 'Ürün bulunamadı. Lütfen daha sonra tekrar dene.');
+        Alert.alert(t('common.error'), t('profile.productNotFound'));
         setPurchasing(false);
         await endConnection();
         return;
@@ -201,7 +234,8 @@ export default function ProfileScreen({ navigation }: any) {
             await supabase.from('users').update({ is_premium: true }).eq('id', user.id);
             setProfile(prev => prev ? { ...prev, is_premium: true } as any : null);
           }
-          Alert.alert('Başarılı! 🎉', 'Premium hesabına hoş geldin!');
+          trackEvent('premium_purchase');
+          Alert.alert(t('common.success'), t('profile.premiumWelcome'));
         }
         setPurchasing(false);
         purchaseUpdate.remove();
@@ -211,7 +245,7 @@ export default function ProfileScreen({ navigation }: any) {
 
       const purchaseError = purchaseErrorListener((error) => {
         if (error.code !== 'E_USER_CANCELLED') {
-          Alert.alert('Hata', 'Satın alma işlemi başarısız oldu.');
+          Alert.alert(t('common.error'), t('profile.purchaseFailed'));
         }
         setPurchasing(false);
         purchaseUpdate.remove();
@@ -224,13 +258,14 @@ export default function ProfileScreen({ navigation }: any) {
       await requestSubscription({ sku: PREMIUM_PRODUCT_ID });
     } catch (err: any) {
       console.error('Purchase error:', err);
+      captureError(err, { context: 'purchase' });
       if (Platform.OS === 'ios') {
         Alert.alert(
-          'Satın Alma',
-          'Abonelik şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.',
+          t('profile.purchaseTitle'),
+          t('profile.purchaseUnavailable'),
         );
       } else {
-        Alert.alert('Hata', err?.message || 'Satın alma başlatılamadı.');
+        Alert.alert(t('common.error'), err?.message || t('profile.purchaseStartError'));
       }
       setPurchasing(false);
       try { await endConnection(); } catch {}
@@ -239,16 +274,18 @@ export default function ProfileScreen({ navigation }: any) {
 
   const relationshipLabel = (type: string) => {
     const map: Record<string, string> = {
-      serious: 'Ciddi ilişki', casual: 'Rahat arkadaşlık', open: 'Göreceğiz',
+      serious: t('profile.relationSerious'),
+      casual: t('profile.relationCasual'),
+      open: t('profile.relationOpen'),
     };
     return map[type] || type;
   };
 
   if (loading) {
     return (
-      <LinearGradient colors={['#FFF8FA', '#F8F5FF', '#F5FAFF']} style={s.bg}>
+      <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
         <SafeAreaView style={s.safeArea}>
-          <View style={s.loadingWrap}><ActivityIndicator color="#FF6B9D" size="large" /></View>
+          <View style={s.loadingWrap}><ActivityIndicator color={colors.accentPink} size="large" /></View>
         </SafeAreaView>
       </LinearGradient>
     );
@@ -256,12 +293,12 @@ export default function ProfileScreen({ navigation }: any) {
 
   if (!profile) {
     return (
-      <LinearGradient colors={['#FFF8FA', '#F8F5FF', '#F5FAFF']} style={s.bg}>
+      <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
         <SafeAreaView style={s.safeArea}>
           <View style={s.loadingWrap}>
-            <Text style={{ color: '#9B8AB8' }}>Profil yüklenemedi</Text>
+            <Text style={{ color: colors.textSecondary }}>{t('profile.loadFailed')}</Text>
             <TouchableOpacity onPress={fetchProfile} style={{ marginTop: 16 }}>
-              <Text style={{ color: '#FF6B9D', fontWeight: '700' }}>Tekrar dene</Text>
+              <Text style={{ color: colors.accentPink, fontWeight: '700' }}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -270,54 +307,54 @@ export default function ProfileScreen({ navigation }: any) {
   }
 
   return (
-    <LinearGradient colors={['#FFF8FA', '#F8F5FF', '#F5FAFF']} style={s.bg}>
+    <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
       <SafeAreaView style={s.safeArea}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Text style={s.back}>‹</Text>
+            <Text style={[s.back, { color: colors.textSecondary }]}>‹</Text>
           </TouchableOpacity>
-          <Text style={s.title}>Profilim ✨</Text>
+          <Text style={[s.title, { color: colors.textPrimary }]}>{t('profile.title')}</Text>
           <TouchableOpacity onPress={signOut} style={s.signOutBtn}>
-            <Text style={s.signOut}>Çıkış</Text>
+            <Text style={[s.signOut, { color: colors.accentPink }]}>{t('profile.signOut')}</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={s.scroll}>
           <View style={s.avatarSection}>
             <TouchableOpacity style={s.avatarWrap} onPress={pickImage} disabled={uploading}>
-              <LinearGradient colors={['#FF6B9D', '#C084FC', '#818CF8']} style={s.avatarRing}>
+              <LinearGradient colors={colors.accentGradient as any} style={s.avatarRing}>
                 {profile.photos?.[0] ? (
                   <Image source={{ uri: profile.photos[0] }} style={s.avatarImg} />
                 ) : (
-                  <View style={s.avatarPlaceholder}>
-                    <Text style={s.avatarInitial}>{profile.name?.[0]?.toUpperCase() || 'M'}</Text>
+                  <View style={[s.avatarPlaceholder, { backgroundColor: colors.card }]}>
+                    <Text style={[s.avatarInitial, { color: colors.accentPink }]}>{profile.name?.[0]?.toUpperCase() || 'M'}</Text>
                   </View>
                 )}
               </LinearGradient>
-              <View style={s.avatarAddBtn}>
+              <View style={[s.avatarAddBtn, { backgroundColor: colors.userBubble, borderColor: colors.inputBg }]}>
                 {uploading
                   ? <ActivityIndicator color="#fff" size="small" />
                   : <Text style={s.avatarAddIcon}>+</Text>
                 }
               </View>
             </TouchableOpacity>
-            <Text style={s.avatarName}>{profile.name}</Text>
-            <Text style={s.avatarSub}>{profile.city} · {profile.age}</Text>
+            <Text style={[s.avatarName, { color: colors.textPrimary }]}>{profile.name}</Text>
+            <Text style={[s.avatarSub, { color: colors.textSecondary }]}>{profile.city} · {profile.age}</Text>
           </View>
 
           <View style={s.premiumCard}>
-            <LinearGradient colors={['#FF6B9D', '#C084FC', '#818CF8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.premiumGrad}>
+            <LinearGradient colors={colors.accentGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.premiumGrad}>
               <Text style={s.premiumIcon}>⚡</Text>
-              <Text style={s.premiumTitle}>Avant Premium</Text>
-              <Text style={s.premiumDesc}>Sınırsız eşleşme ve öncelikli agent</Text>
+              <Text style={s.premiumTitle}>{t('profile.premiumTitle')}</Text>
+              <Text style={s.premiumDesc}>{t('profile.premiumDesc')}</Text>
               {profile.is_premium ? (
                 <View style={s.premiumBuyBtn}>
-                  <Text style={[s.premiumBuyTxt, { color: '#10B981' }]}>Premium Aktif</Text>
+                  <Text style={[s.premiumBuyTxt, { color: '#10B981' }]}>{t('profile.premiumActive')}</Text>
                 </View>
               ) : (
                 <>
-                  <Text style={s.premiumPrice}>$9.99 / ay</Text>
-                  <Text style={s.premiumDuration}>Aylık otomatik yenilenen abonelik</Text>
+                  <Text style={s.premiumPrice}>{t('profile.premiumPrice')}</Text>
+                  <Text style={s.premiumDuration}>{t('profile.premiumDuration')}</Text>
                   <TouchableOpacity
                     style={s.premiumBuyBtn}
                     onPress={handlePurchase}
@@ -326,21 +363,21 @@ export default function ProfileScreen({ navigation }: any) {
                   >
                     {purchasing
                       ? <ActivityIndicator color="#C084FC" size="small" />
-                      : <Text style={s.premiumBuyTxt}>Abone Ol</Text>
+                      : <Text style={s.premiumBuyTxt}>{t('profile.premiumSubscribe')}</Text>
                     }
                   </TouchableOpacity>
                 </>
               )}
               <Text style={s.premiumLegal}>
-                Ödeme Apple ID hesabınızdan alınır. Abonelik, mevcut dönem bitmeden en az 24 saat önce iptal edilmediği sürece otomatik olarak yenilenir.
+                {t('profile.premiumLegal')}
               </Text>
               <View style={s.premiumLinks}>
                 <Text style={s.premiumLink} onPress={() => Linking.openURL('https://melihagraz.github.io/avant-app')}>
-                  Gizlilik Politikası
+                  {t('profile.privacyPolicy')}
                 </Text>
                 <Text style={s.premiumLinkSep}>·</Text>
                 <Text style={s.premiumLink} onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
-                  Kullanım Koşulları
+                  {t('profile.termsOfService')}
                 </Text>
               </View>
             </LinearGradient>
@@ -355,8 +392,8 @@ export default function ProfileScreen({ navigation }: any) {
                     {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.deleteBtnTxt}>×</Text>}
                   </TouchableOpacity>
                   {i === 0 && (
-                    <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.mainBadge}>
-                      <Text style={s.mainBadgeTxt}>Ana</Text>
+                    <LinearGradient colors={colors.accentGradientAlt as any} style={s.mainBadge}>
+                      <Text style={s.mainBadgeTxt}>{t('profile.main')}</Text>
                     </LinearGradient>
                   )}
                 </View>
@@ -364,45 +401,45 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           )}
 
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Profil bilgileri</Text>
+          <View style={[s.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Text style={[s.cardTitle, { color: colors.textSecondary }]}>{t('profile.profileInfo')}</Text>
             {[
-              { label: 'Ad', value: profile.name },
-              { label: 'Yaş', value: String(profile.age) },
-              { label: 'Şehir', value: profile.city },
-              { label: 'Arıyor', value: relationshipLabel(profile.relationship_type || '') },
+              { label: t('profile.labelName'), value: profile.name },
+              { label: t('profile.labelAge'), value: String(profile.age) },
+              { label: t('profile.labelCity'), value: profile.city },
+              { label: t('profile.labelSeeking'), value: relationshipLabel(profile.relationship_type || '') },
             ].map((row, i, arr) => (
-              <View key={row.label} style={[s.row, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
-                <Text style={s.rowLabel}>{row.label}</Text>
-                <Text style={s.rowValue}>{row.value}</Text>
+              <View key={row.label} style={[s.row, { borderBottomColor: colors.separator }, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
+                <Text style={[s.rowLabel, { color: colors.textSecondary }]}>{row.label}</Text>
+                <Text style={[s.rowValue, { color: colors.textPrimary }]}>{row.value}</Text>
               </View>
             ))}
           </View>
 
-          <View style={s.agentCard}>
+          <View style={[s.agentCard, { backgroundColor: colors.card }]}>
             <View style={s.agentDotWrap}>
               <View style={s.agentDot} />
             </View>
             <View>
-              <Text style={s.agentTitle}>Agentın aktif 🤖</Text>
-              <Text style={s.agentSub}>Seni uygun kişilerle eşleştiriyor</Text>
+              <Text style={[s.agentTitle, { color: colors.textPrimary }]}>{t('profile.agentActive')}</Text>
+              <Text style={[s.agentSub, { color: colors.textSecondary }]}>{t('profile.agentActiveSub')}</Text>
             </View>
           </View>
 
           <TouchableOpacity
-            style={s.supportBtn}
+            style={[s.supportBtn, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
             onPress={() => Linking.openURL('mailto:melihagraz@gmail.com?subject=Avant%20Destek%20Talebi')}
             activeOpacity={0.7}
           >
             <Text style={s.supportIcon}>💬</Text>
-            <Text style={s.supportTxt}>Destek & Yardım</Text>
+            <Text style={[s.supportTxt, { color: colors.userBubble }]}>{t('profile.support')}</Text>
           </TouchableOpacity>
 
           <View style={s.dangerZone}>
             <TouchableOpacity style={s.deleteAccountBtn} onPress={deleteAccount} disabled={deleting}>
               {deleting
                 ? <ActivityIndicator color="#FF6B9D" size="small" />
-                : <Text style={s.deleteAccountTxt}>Hesabı sil</Text>
+                : <Text style={[s.deleteAccountTxt, { color: colors.accentPink }]}>{t('profile.deleteAccount')}</Text>
               }
             </TouchableOpacity>
           </View>

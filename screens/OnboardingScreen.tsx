@@ -1,5 +1,5 @@
 // screens/OnboardingScreen.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, SafeAreaView,
@@ -7,8 +7,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { buildAgentSystemPrompt } from '../lib/agentPrompt';
+import { useTheme } from '../lib/theme';
+import { trackEvent } from '../lib/analytics';
+import { captureError } from '../lib/sentry';
+import { moderateText, getModerationMessage } from '../lib/moderation';
 
 const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -25,104 +30,6 @@ interface Question {
   optional?: boolean;
 }
 
-const QUESTIONS: Question[] = [
-  {
-    id: 'name', key: 'name', type: 'text',
-    text: 'Merhaba! Ben senin dating agentınım 🤖 Adını öğrenebilir miyim?',
-    placeholder: 'Adın...',
-  },
-  {
-    id: 'age', key: 'age', type: 'number',
-    text: (a) => `Güzel isim ${a.name}! ✨ Kaç yaşındasın?`,
-    placeholder: 'Yaşın...',
-  },
-  {
-    id: 'gender', key: 'gender', type: 'chips',
-    text: 'Kendini nasıl tanımlıyorsun?',
-    chips: [
-      { label: 'Erkek', value: 'male' },
-      { label: 'Kadın', value: 'female' },
-      { label: 'Diğer', value: 'other' },
-    ],
-  },
-  {
-    id: 'seeking', key: 'seeking', type: 'chips_multi',
-    text: 'Kiminle tanışmak istiyorsun? 💜 (Birden fazla seçebilirsin)',
-    chips: [
-      { label: 'Erkek', value: 'male' },
-      { label: 'Kadın', value: 'female' },
-      { label: 'Fark etmez', value: 'any' },
-    ],
-  },
-  {
-    id: 'city', key: 'city', type: 'chips',
-    text: 'Hangi şehirdesin?',
-    chips: [
-      { label: 'İstanbul', value: 'Istanbul' },
-      { label: 'Ankara', value: 'Ankara' },
-      { label: 'İzmir', value: 'Izmir' },
-      { label: 'Antalya', value: 'Antalya' },
-      { label: 'Trabzon', value: 'Trabzon' },
-      { label: 'Samsun', value: 'Samsun' },
-      { label: 'Gaziantep', value: 'Gaziantep' },
-      { label: 'Van', value: 'Van' },
-      { label: 'Diğer', value: 'other' },
-    ],
-    placeholder: 'Şehir adını yaz...',
-  },
-  {
-    id: 'age_range', key: 'age_range', type: 'chips',
-    text: 'Kaç yaş aralığında biri arıyorsun?',
-    chips: [
-      { label: '18-25', value: '18-25' },
-      { label: '23-30', value: '23-30' },
-      { label: '28-38', value: '28-38' },
-      { label: '35-50', value: '35-50' },
-      { label: 'Fark etmez', value: '18-80' },
-    ],
-  },
-  {
-    id: 'relationship', key: 'relationship_type', type: 'chips',
-    text: 'Ne tür bir ilişki arıyorsun?',
-    chips: [
-      { label: 'Ciddi ilişki 💍', value: 'serious' },
-      { label: 'Rahat arkadaşlık', value: 'casual' },
-      { label: 'Göreceğiz 🤷', value: 'open' },
-    ],
-  },
-  {
-    id: 'job', key: 'job', type: 'text',
-    text: 'Harika! Şimdi seni gerçekten tanımaya başlayalım 🎯\n\nNe iş yapıyorsun?',
-    placeholder: 'Yazılımcı, öğrenci, mimar...',
-  },
-  {
-    id: 'personality', key: 'personality', type: 'text',
-    text: 'Hayatında en çok ne zaman mutlu hissediyorsun? 😊',
-    placeholder: 'İstediğin kadar yaz...',
-  },
-  {
-    id: 'looking_for', key: 'looking_for', type: 'text',
-    text: 'Peki bir ilişkide en çok neye değer verirsin? 💜',
-    placeholder: 'Güven, dürüstlük, eğlence...',
-  },
-  {
-    id: 'dealbreakers', key: 'dealbreakers', type: 'text',
-    text: 'Kesinlikle istemediğin, tolere edemediğin bir özellik var mı?',
-    placeholder: 'Sigara, sorumsuzluk...',
-  },
-  {
-    id: 'extra', key: 'extra', type: 'text',
-    text: 'Son olarak — agentına eklemek istediğin bir şey var mı?\n\nSeni daha iyi tanımlayan, önemli gördüğün herhangi bir şey...',
-    placeholder: 'Vegan yaşam tarzım var, annem hasta bakıyorum...',
-    optional: true,
-  },
-  {
-    id: 'photo', key: 'photo', type: 'photo',
-    text: (a) => `Neredeyse bitti ${a.name}! 🎉 Bir profil fotoğrafı eklemek ister misin?\n\nFotoğraflı profiller çok daha fazla eşleşme alıyor.`,
-    optional: true,
-  },
-];
-
 interface Message {
   role: 'agent' | 'user';
   text: string;
@@ -130,6 +37,107 @@ interface Message {
 }
 
 export default function OnboardingScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+
+  const QUESTIONS: Question[] = useMemo(() => [
+    {
+      id: 'name', key: 'name', type: 'text' as QuestionType,
+      text: t('onboarding.qName'),
+      placeholder: t('onboarding.placeholderName'),
+    },
+    {
+      id: 'age', key: 'age', type: 'number' as QuestionType,
+      text: (a: Record<string, string>) => t('onboarding.qAge', { name: a.name }),
+      placeholder: t('onboarding.placeholderAge'),
+    },
+    {
+      id: 'gender', key: 'gender', type: 'chips' as QuestionType,
+      text: t('onboarding.qGender'),
+      chips: [
+        { label: t('onboarding.male'), value: 'male' },
+        { label: t('onboarding.female'), value: 'female' },
+        { label: t('onboarding.other'), value: 'other' },
+      ],
+    },
+    {
+      id: 'seeking', key: 'seeking', type: 'chips_multi' as QuestionType,
+      text: t('onboarding.qSeeking'),
+      chips: [
+        { label: t('onboarding.male'), value: 'male' },
+        { label: t('onboarding.female'), value: 'female' },
+        { label: t('onboarding.dontCare'), value: 'any' },
+      ],
+    },
+    {
+      id: 'city', key: 'city', type: 'chips' as QuestionType,
+      text: t('onboarding.qCity'),
+      chips: [
+        { label: t('cities.istanbul'), value: 'Istanbul' },
+        { label: t('cities.ankara'), value: 'Ankara' },
+        { label: t('cities.izmir'), value: 'Izmir' },
+        { label: t('cities.antalya'), value: 'Antalya' },
+        { label: t('cities.trabzon'), value: 'Trabzon' },
+        { label: t('cities.samsun'), value: 'Samsun' },
+        { label: t('cities.gaziantep'), value: 'Gaziantep' },
+        { label: t('cities.van'), value: 'Van' },
+        { label: t('cities.other'), value: 'other' },
+      ],
+      placeholder: t('onboarding.placeholderCity'),
+    },
+    {
+      id: 'age_range', key: 'age_range', type: 'chips' as QuestionType,
+      text: t('onboarding.qAgeRange'),
+      chips: [
+        { label: '18-25', value: '18-25' },
+        { label: '23-30', value: '23-30' },
+        { label: '28-38', value: '28-38' },
+        { label: '35-50', value: '35-50' },
+        { label: t('ageRanges.any'), value: '18-80' },
+      ],
+    },
+    {
+      id: 'relationship', key: 'relationship_type', type: 'chips' as QuestionType,
+      text: t('onboarding.qRelationship'),
+      chips: [
+        { label: t('onboarding.serious'), value: 'serious' },
+        { label: t('onboarding.casual'), value: 'casual' },
+        { label: t('onboarding.open'), value: 'open' },
+      ],
+    },
+    {
+      id: 'job', key: 'job', type: 'text' as QuestionType,
+      text: t('onboarding.qJob'),
+      placeholder: t('onboarding.placeholderJob'),
+    },
+    {
+      id: 'personality', key: 'personality', type: 'text' as QuestionType,
+      text: t('onboarding.qPersonality'),
+      placeholder: t('onboarding.placeholderPersonality'),
+    },
+    {
+      id: 'looking_for', key: 'looking_for', type: 'text' as QuestionType,
+      text: t('onboarding.qLookingFor'),
+      placeholder: t('onboarding.placeholderLookingFor'),
+    },
+    {
+      id: 'dealbreakers', key: 'dealbreakers', type: 'text' as QuestionType,
+      text: t('onboarding.qDealbreakers'),
+      placeholder: t('onboarding.placeholderDealbreakers'),
+    },
+    {
+      id: 'extra', key: 'extra', type: 'text' as QuestionType,
+      text: t('onboarding.qExtra'),
+      placeholder: t('onboarding.placeholderExtra'),
+      optional: true,
+    },
+    {
+      id: 'photo', key: 'photo', type: 'photo' as QuestionType,
+      text: (a: Record<string, string>) => t('onboarding.qPhoto', { name: a.name }),
+      optional: true,
+    },
+  ], [t]);
+
   const [step, setStep] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -199,6 +207,16 @@ export default function OnboardingScreen({ navigation }: any) {
     if (busy || !input.trim()) return;
     const v = input.trim();
     if (!validateInput(v, currentQ)) return;
+
+    // İçerik moderasyonu (sadece serbest metin alanları)
+    if (['personality', 'looking_for', 'dealbreakers', 'extra', 'job'].includes(currentQ.id)) {
+      const modResult = moderateText(v);
+      if (!modResult.clean) {
+        Alert.alert(t('common.error'), t(getModerationMessage(modResult.reason || '')));
+        return;
+      }
+    }
+
     advance(v, v);
   };
 
@@ -212,7 +230,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const skipOptional = () => {
     if (busy) return;
-    advance('Geçtim', '');
+    advance(t('onboarding.skipped'), '');
   };
 
   const pickPhoto = async () => {
@@ -227,10 +245,11 @@ export default function OnboardingScreen({ navigation }: any) {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_PHOTO_SIZE_BYTES) {
-        Alert.alert('Dosya çok büyük', 'Fotoğraf en fazla 5MB olabilir.');
+        Alert.alert(t('common.photoTooBig'), t('common.photoTooBigDesc'));
         return;
       }
       setPhotoUri(asset.uri);
+      trackEvent('photo_upload', { screen: 'onboarding' });
     }
   };
 
@@ -238,11 +257,12 @@ export default function OnboardingScreen({ navigation }: any) {
     setBusy(true);
     const newAnswers = { ...answers, [currentQ.key]: value };
     setAnswers(newAnswers);
+    trackEvent('onboarding_step', { step: step + 1, question: currentQ.id });
     setInput('');
     setSelectedChips([]);
     setShowCityInput(false);
 
-    if (userLabel !== 'Geçtim') {
+    if (userLabel !== t('onboarding.skipped')) {
       setMessages(prev => [...prev, { role: 'user', text: userLabel }]);
     }
 
@@ -262,9 +282,10 @@ export default function OnboardingScreen({ navigation }: any) {
             setTimeout(() => inputRef.current?.focus(), 200);
           }
         } else {
+          trackEvent('onboarding_complete');
           setMessages(prev => [
             ...prev.slice(0, -1),
-            { role: 'agent', text: `Mükemmel ${newAnswers.name}! 🎉 Agentın hazır. Uygun kişilerle konuşmaya başlıyor... 🔍` },
+            { role: 'agent', text: t('onboarding.agentReady', { name: newAnswers.name }) },
           ]);
           setBusy(false);
           setTimeout(() => finalize(newAnswers), 1000);
@@ -296,7 +317,7 @@ export default function OnboardingScreen({ navigation }: any) {
             photoUrl = publicUrl;
           }
         } catch (photoErr) {
-          console.error('Photo upload error:', photoErr);
+          captureError(photoErr, { context: 'onboarding_photo_upload' });
         }
       }
 
@@ -329,7 +350,7 @@ export default function OnboardingScreen({ navigation }: any) {
       await supabase.functions.invoke('start-match', { body: { user_id: user.id } });
       navigation.replace('Home');
     } catch (err) {
-      console.error('Kayit hatasi:', err);
+      captureError(err, { context: 'onboarding_finalize' });
       setSaving(false);
     }
   };
@@ -337,19 +358,19 @@ export default function OnboardingScreen({ navigation }: any) {
   const progress = (step / QUESTIONS.length) * 100;
 
   return (
-    <LinearGradient colors={['#FFF8FA', '#F8F5FF', '#F5FAFF']} style={s.bg}>
+    <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
       <SafeAreaView style={s.safeArea}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.header}>
-            <Text style={s.logo}>av<Text style={s.accent}>a</Text>nt</Text>
-            <View style={s.progBar}>
+            <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.accent, { color: colors.accentPink }]}>a</Text>nt</Text>
+            <View style={[s.progBar, { backgroundColor: colors.border }]}>
               <LinearGradient
-                colors={['#FF6B9D', '#C084FC', '#818CF8']}
+                colors={colors.accentGradient as any}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={[s.progFill, { width: `${progress}%` }]}
               />
             </View>
-            <Text style={s.stepLbl}>{step + 1}/{QUESTIONS.length}</Text>
+            <Text style={[s.stepLbl, { color: colors.textSecondary }]}>{step + 1}/{QUESTIONS.length}</Text>
           </View>
 
           <ScrollView ref={scrollRef} style={s.chat} contentContainerStyle={s.chatContent} keyboardShouldPersistTaps="handled">
@@ -366,17 +387,17 @@ export default function OnboardingScreen({ navigation }: any) {
                 <View key={i}>
                   <View style={[s.row, !isAgent && s.rowRight]}>
                     {isAgent && (
-                      <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.avA}>
+                      <LinearGradient colors={colors.accentGradientAlt as any} style={s.avA}>
                         <Text style={s.avTxt}>A</Text>
                       </LinearGradient>
                     )}
-                    <View style={[s.bbl, isAgent ? s.bblA : s.bblU]}>
-                      <Text style={[s.bblTxt, !isAgent && s.bblTxtU]}>
+                    <View style={[s.bbl, isAgent ? [s.bblA, { backgroundColor: colors.card, shadowColor: colors.shadow }] : [s.bblU, { backgroundColor: colors.userBubble }]]}>
+                      <Text style={[s.bblTxt, { color: colors.textPrimary }, !isAgent && s.bblTxtU]}>
                         {isTyping ? '· · ·' : msg.text}
                       </Text>
                     </View>
                     {!isAgent && (
-                      <View style={s.avU}><Text style={[s.avTxt, { color: '#7C3AED' }]}>S</Text></View>
+                      <View style={[s.avU, { backgroundColor: colors.userAvatarBg }]}><Text style={[s.avTxt, { color: colors.userBubble }]}>S</Text></View>
                     )}
                   </View>
 
@@ -385,15 +406,15 @@ export default function OnboardingScreen({ navigation }: any) {
                       {msgQ!.chips!.map(chip => (
                         <TouchableOpacity
                           key={chip.value}
-                          style={[s.chip, selectedChips.includes(chip.value) && s.chipSel]}
+                          style={[s.chip, { borderColor: colors.border, backgroundColor: colors.card }, selectedChips.includes(chip.value) && s.chipSel]}
                           onPress={() => onChipPress(chip)}
                         >
                           {selectedChips.includes(chip.value) ? (
-                            <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.chipGrad}>
+                            <LinearGradient colors={colors.accentGradientAlt as any} style={s.chipGrad}>
                               <Text style={s.chipTxtSel}>{chip.label}</Text>
                             </LinearGradient>
                           ) : (
-                            <Text style={s.chipTxt}>{chip.label}</Text>
+                            <Text style={[s.chipTxt, { color: colors.textPrimary }]}>{chip.label}</Text>
                           )}
                         </TouchableOpacity>
                       ))}
@@ -404,22 +425,22 @@ export default function OnboardingScreen({ navigation }: any) {
                           disabled={selectedChips.length === 0}
                         >
                           <LinearGradient
-                            colors={selectedChips.length === 0 ? ['#E0D0E8', '#D8C8E0'] : ['#FF6B9D', '#C084FC']}
+                            colors={selectedChips.length === 0 ? (colors.disabledGradient as any) : (colors.accentGradientAlt as any)}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={s.devamGrad}
                           >
-                            <Text style={s.devamTxt}>Devam →</Text>
+                            <Text style={s.devamTxt}>{t('onboarding.devamBtn')}</Text>
                           </LinearGradient>
                         </TouchableOpacity>
                       )}
                       {isCityStep && showCityInput && (
                         <TextInput
                           ref={inputRef}
-                          style={[s.input, { marginTop: 4, flex: undefined, width: '100%' }]}
+                          style={[s.input, { marginTop: 4, flex: undefined, width: '100%', backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }]}
                           value={input}
                           onChangeText={setInput}
-                          placeholder="Şehir adını yaz..."
-                          placeholderTextColor="#C4B5D0"
+                          placeholder={t('onboarding.placeholderCity')}
+                          placeholderTextColor={colors.placeholder}
                           returnKeyType="send"
                           onSubmitEditing={sendText}
                         />
@@ -431,26 +452,26 @@ export default function OnboardingScreen({ navigation }: any) {
                     <View style={s.photoStep}>
                       {photoUri ? (
                         <View style={s.photoPreviewWrap}>
-                          <Image source={{ uri: photoUri }} style={s.photoPreview} />
+                          <Image source={{ uri: photoUri }} style={[s.photoPreview, { backgroundColor: colors.inputBg }]} />
                           <TouchableOpacity style={s.changePhotoBadge} onPress={pickPhoto}>
-                            <Text style={s.changePhotoBadgeTxt}>Değiştir</Text>
+                            <Text style={s.changePhotoBadgeTxt}>{t('onboarding.changePhoto')}</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <TouchableOpacity style={s.pickPhotoBtn} onPress={pickPhoto}>
-                          <Text style={s.pickPhotoBtnTxt}>📷 Fotoğraf seç</Text>
+                        <TouchableOpacity style={[s.pickPhotoBtn, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow }]} onPress={pickPhoto}>
+                          <Text style={[s.pickPhotoBtnTxt, { color: colors.textPrimary }]}>{t('onboarding.selectPhoto')}</Text>
                         </TouchableOpacity>
                       )}
                       <View style={s.photoActions}>
                         {photoUri && (
-                          <TouchableOpacity style={s.confirmPhotoBtn} onPress={() => advance('Fotoğraf eklendi ✓', photoUri!)}>
-                            <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.confirmGrad}>
-                              <Text style={s.confirmPhotoBtnTxt}>Devam et →</Text>
+                          <TouchableOpacity style={s.confirmPhotoBtn} onPress={() => advance(t('onboarding.photoAdded'), photoUri!)}>
+                            <LinearGradient colors={colors.accentGradientAlt as any} style={s.confirmGrad}>
+                              <Text style={s.confirmPhotoBtnTxt}>{t('common.continue')}</Text>
                             </LinearGradient>
                           </TouchableOpacity>
                         )}
                         <TouchableOpacity style={s.skipPhotoBtn} onPress={skipOptional}>
-                          <Text style={s.skipPhotoBtnTxt}>Şimdilik geç</Text>
+                          <Text style={[s.skipPhotoBtnTxt, { color: colors.placeholder }]}>{t('onboarding.skipPhoto')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -458,7 +479,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
                   {showOptional && (
                     <TouchableOpacity style={s.skipBtn} onPress={skipOptional}>
-                      <Text style={s.skipTxt}>Geç →</Text>
+                      <Text style={[s.skipTxt, { color: colors.placeholder }]}>{t('common.skip')} →</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -467,23 +488,23 @@ export default function OnboardingScreen({ navigation }: any) {
 
             {saving && (
               <View style={s.row}>
-                <LinearGradient colors={['#FF6B9D', '#C084FC']} style={s.avA}>
+                <LinearGradient colors={colors.accentGradientAlt as any} style={s.avA}>
                   <Text style={s.avTxt}>A</Text>
                 </LinearGradient>
-                <View style={s.bblA}><ActivityIndicator size="small" color="#FF6B9D" /></View>
+                <View style={[s.bblA, { backgroundColor: colors.card, shadowColor: colors.shadow }]}><ActivityIndicator size="small" color="#FF6B9D" /></View>
               </View>
             )}
           </ScrollView>
 
           {showTextInput && !isCityStep && (
-            <View style={s.inputRow}>
+            <View style={[s.inputRow, { backgroundColor: colors.card, borderTopColor: colors.separator }]}>
               <TextInput
                 ref={inputRef}
-                style={s.input}
+                style={[s.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }]}
                 value={input}
                 onChangeText={setInput}
-                placeholder={currentQ.placeholder || 'Cevabını yaz...'}
-                placeholderTextColor="#C4B5D0"
+                placeholder={currentQ.placeholder || t('onboarding.placeholderDefault')}
+                placeholderTextColor={colors.placeholder}
                 multiline={currentQ.type === 'text'}
                 keyboardType={currentQ.type === 'number' ? 'number-pad' : 'default'}
                 maxLength={currentQ.type === 'number' ? 3 : currentQ.id === 'name' ? 50 : 500}
@@ -496,7 +517,7 @@ export default function OnboardingScreen({ navigation }: any) {
                 disabled={!input.trim() || busy}
               >
                 <LinearGradient
-                  colors={(!input.trim() || busy) ? ['#E0D0E8', '#D8C8E0'] : ['#FF6B9D', '#C084FC']}
+                  colors={(!input.trim() || busy) ? (colors.disabledGradient as any) : (colors.accentGradientAlt as any)}
                   style={s.sendGrad}
                 >
                   <Text style={s.sendTxt}>↑</Text>

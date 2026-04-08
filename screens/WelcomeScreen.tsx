@@ -4,13 +4,19 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '../lib/theme';
+import { trackEvent } from '../lib/analytics';
 
 export default function WelcomeScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
   const stepAnims = [0, 1, 2].map(() => useRef(new Animated.Value(0)).current);
 
   useEffect(() => {
+    trackEvent('onboarding_welcome');
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, tension: 50, friction: 8, useNativeDriver: true }),
@@ -21,61 +27,66 @@ export default function WelcomeScreen({ navigation }: any) {
     });
   }, []);
 
+  const steps = [
+    { emoji: '🎯', title: t('welcome.step1Title'), desc: t('welcome.step1Desc'), color: '#FF6B9D' },
+    { emoji: '🤖', title: t('welcome.step2Title'), desc: t('welcome.step2Desc'), color: '#C084FC' },
+    { emoji: '💬', title: t('welcome.step3Title'), desc: t('welcome.step3Desc'), color: '#818CF8' },
+  ];
+
   return (
-    <LinearGradient colors={['#FFF0F5', '#FDE8EF', '#F0E6FF', '#E8F4FD']} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <LinearGradient colors={colors.authGradient as any} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <SafeAreaView style={s.container}>
         <Animated.View style={[s.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
           <View style={s.logoWrap}>
-            <Text style={s.logo}>av<Text style={s.accent}>a</Text>nt</Text>
-            <View style={s.agentPill}>
+            <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.accent, { color: colors.accentPink }]}>a</Text>nt</Text>
+            <View style={[s.agentPill, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
               <Text style={s.pillEmoji}>🤖</Text>
-              <Text style={s.pillTxt}>AI Agent Dating</Text>
+              <Text style={[s.pillTxt, { color: colors.userBubble }]}>{t('welcome.pillLabel')}</Text>
             </View>
           </View>
 
           <View style={s.messageWrap}>
-            <Text style={s.title}>Önce agentın{'\n'}tanışır 💜</Text>
-            <Text style={s.sub}>
-              Seni temsil eden bir AI agent oluşturuyorum. Agentin arka planda çalışır, uyumlu kişileri bulur ve eşleşince seni haberdar eder.
+            <Text style={[s.title, { color: colors.textPrimary }]}>{t('welcome.title')}</Text>
+            <Text style={[s.sub, { color: colors.textMuted }]}>
+              {t('welcome.subtitle')}
             </Text>
           </View>
 
           <View style={s.steps}>
-            {[
-              { emoji: '🎯', title: 'Seni tanıyorum', desc: 'Birkaç soru soruyorum, agentını oluşturuyorum', color: '#FF6B9D' },
-              { emoji: '🤖', title: 'Agentin çalışır', desc: 'Uyumlu kişilerin agentlarıyla konuşur', color: '#C084FC' },
-              { emoji: '💬', title: 'Top sende', desc: 'Eşleşince karar senin — devam et ya da geç', color: '#818CF8' },
-            ].map((step, i) => (
-              <Animated.View key={i} style={[s.step, { opacity: stepAnims[i], transform: [{ scale: stepAnims[i] }] }]}>
+            {steps.map((step, i) => (
+              <Animated.View key={i} style={[s.step, { backgroundColor: colors.card, shadowColor: colors.shadow }, { opacity: stepAnims[i], transform: [{ scale: stepAnims[i] }] }]}>
                 <View style={[s.stepIcon, { backgroundColor: step.color + '18' }]}>
                   <Text style={s.stepEmoji}>{step.emoji}</Text>
                 </View>
                 <View style={s.stepText}>
-                  <Text style={s.stepTitle}>{step.title}</Text>
-                  <Text style={s.stepDesc}>{step.desc}</Text>
+                  <Text style={[s.stepTitle, { color: colors.textPrimary }]}>{step.title}</Text>
+                  <Text style={[s.stepDesc, { color: colors.textSecondary }]}>{step.desc}</Text>
                 </View>
               </Animated.View>
             ))}
           </View>
 
-          <View style={s.noteCard}>
-            <Text style={s.note}>
-              Sorulardan sıkılırsan istediğin zaman "Yeter" diyebilirsin — agentin hemen devreye girer 🚀
+          <View style={[s.noteCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Text style={[s.note, { color: colors.textMuted }]}>
+              {t('welcome.note')}
             </Text>
           </View>
 
           <TouchableOpacity
             style={s.btn}
-            onPress={() => navigation.replace('Onboarding')}
+            onPress={() => {
+              trackEvent('onboarding_start');
+              navigation.replace('Onboarding');
+            }}
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={['#FF6B9D', '#C084FC', '#818CF8']}
+              colors={colors.accentGradient as any}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={s.btnGrad}
             >
-              <Text style={s.btnTxt}>Başlayalım 🎉</Text>
+              <Text style={s.btnTxt}>{t('welcome.startBtn')}</Text>
             </LinearGradient>
           </TouchableOpacity>
 

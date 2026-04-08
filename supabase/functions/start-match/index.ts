@@ -36,6 +36,21 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "user_id required" }), { status: 400 });
   }
 
+  // 0. Per-user rate limit: max 3 istek / 10 dakika
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { count: recentRequests } = await supabase
+    .from("filter_stats")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user_id)
+    .gte("created_at", tenMinAgo);
+
+  if (recentRequests && recentRequests >= 3) {
+    return new Response(JSON.stringify({ error: "Too many requests. Please wait." }), {
+      status: 429,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // 1. Günlük bütçe kontrolü
   const { data: stats } = await supabase
     .from("filter_stats")
