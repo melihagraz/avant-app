@@ -53,7 +53,9 @@
           "photosPermission": "Avant uses your photo library to let you select profile photos that other users will see on your dating profile. For example, you can choose up to 6 photos from your gallery to showcase yourself."
         }
       ],
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      "@sentry/react-native",
+      "expo-font"
     ],
     "owner": "melihagraz4",
     "extra": {
