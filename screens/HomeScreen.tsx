@@ -12,7 +12,7 @@ import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { useTranslation } from 'react-i18next';
-import { cacheMatches, getCachedMatches, useOnlineStatus } from '../lib/offline';
+import { cacheMatches, getCachedMatches } from '../lib/offline';
 
 interface Match {
   id: string;
@@ -39,30 +39,31 @@ export default function HomeScreen({ navigation }: any) {
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const robotPulseAnim = useRef(new Animated.Value(0)).current;
   const breathAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
   const activityFadeAnim = useRef(new Animated.Value(1)).current;
   const [activityIndex, setActivityIndex] = useState(0);
+  const mountedRef = useRef(true);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   const robotAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   const breathAnimRef = useRef<Animated.CompositeAnimation | null>(null);
-  const glowAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    mountedRef.current = true;
     startPulse();
     startRobotPulse();
     startBreathing();
-    startGlow();
     startActivityRotation();
     init();
     return () => {
+      mountedRef.current = false;
       unsubscribeRef.current?.();
       pulseAnimRef.current?.stop();
       robotAnimRef.current?.stop();
       breathAnimRef.current?.stop();
-      glowAnimRef.current?.stop();
       if (activityIntervalRef.current) clearInterval(activityIntervalRef.current);
+      if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
     };
   }, []);
 
@@ -124,24 +125,18 @@ export default function HomeScreen({ navigation }: any) {
     animation.start();
   };
 
-  const startGlow = () => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 3200, useNativeDriver: false }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 3200, useNativeDriver: false }),
-      ])
-    );
-    glowAnimRef.current = animation;
-    animation.start();
-  };
-
   const startActivityRotation = () => {
     activityIntervalRef.current = setInterval(() => {
+      if (!mountedRef.current) return;
       Animated.sequence([
         Animated.timing(activityFadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         Animated.timing(activityFadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
       ]).start();
-      setTimeout(() => setActivityIndex(i => (i + 1) % 8), 300);
+      activityTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          setActivityIndex(i => (i + 1) % 8);
+        }
+      }, 300);
     }, 2800);
   };
 
@@ -231,7 +226,6 @@ export default function HomeScreen({ navigation }: any) {
 
   const renderMatchCard = (match: Match, idx: number) => {
     const score = avgScore(match);
-    const color = colors.photoPlaceholders[idx % colors.photoPlaceholders.length];
     const hasPhoto = match.other_user?.photos?.length > 0;
 
     return (
@@ -410,7 +404,6 @@ export default function HomeScreen({ navigation }: any) {
                           transform: [{
                             scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }),
                           }],
-                          shadowOpacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.9] }),
                         },
                       ]}
                     >
@@ -456,7 +449,7 @@ export default function HomeScreen({ navigation }: any) {
           )}
         </ScrollView>
 
-        <View style={s.tabBarWrap}>
+        <View style={[s.tabBarWrap, { backgroundColor: isDark ? 'rgba(10,11,26,0.85)' : 'rgba(255,255,255,0.85)' }]}>
           <BlurView
             intensity={isDark ? 80 : 60}
             tint={isDark ? 'dark' : 'light'}
