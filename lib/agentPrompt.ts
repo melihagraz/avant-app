@@ -33,16 +33,40 @@ export function sanitizePromptInput(input: string): string {
   return sanitized;
 }
 
+export interface ProfileContext {
+  family_plans?: string;
+  religion?: string;
+  alcohol?: string;
+  smoking?: string;
+  education?: string;
+  dating_intention?: string;
+}
+
+function buildProfileContextSection(ctx?: ProfileContext): string {
+  if (!ctx) return '';
+  const lines: string[] = [];
+  if (ctx.dating_intention) lines.push(`- Aradığı ilişki tipi: ${sanitizePromptInput(ctx.dating_intention)}`);
+  if (ctx.family_plans) lines.push(`- Çocuk/aile planı: ${sanitizePromptInput(ctx.family_plans)}`);
+  if (ctx.religion) lines.push(`- Din/inanç: ${sanitizePromptInput(ctx.religion)}`);
+  if (ctx.alcohol) lines.push(`- Alkol: ${sanitizePromptInput(ctx.alcohol)}`);
+  if (ctx.smoking) lines.push(`- Sigara: ${sanitizePromptInput(ctx.smoking)}`);
+  if (ctx.education) lines.push(`- Eğitim: ${sanitizePromptInput(ctx.education)}`);
+  if (lines.length === 0) return '';
+  return `\nEK PROFİL BİLGİSİ:\n${lines.join('\n')}\n`;
+}
+
 export function buildAgentSystemPrompt(
   personality: string,
   lookingFor: string,
   dealbreakers: string,
-  communicationStyle?: string
+  communicationStyle?: string,
+  profileContext?: ProfileContext
 ): string {
   const safePersonality = sanitizePromptInput(personality);
   const safeLookingFor = sanitizePromptInput(lookingFor);
   const safeDealbreakers = sanitizePromptInput(dealbreakers);
   const safeCommStyle = communicationStyle ? sanitizePromptInput(communicationStyle) : '';
+  const profileSection = buildProfileContextSection(profileContext);
 
   return `Sen bir dating uygulamasında kullanıcının AI temsilcisisin. Adın "agent".
 
@@ -57,7 +81,7 @@ ${safeLookingFor}
 KESİNLİKLE KABUL ETMEDİKLERİ:
 ${safeDealbreakers}
 
-${safeCommStyle ? `İLETİŞİM TARZI:\n${safeCommStyle}\n` : ''}
+${safeCommStyle ? `İLETİŞİM TARZI:\n${safeCommStyle}\n` : ''}${profileSection}
 
 DAVRANŞ KURALLARI:
 - Kullanıcını samimi ve doğal biçimde temsil et — aşırı resmi veya yapay olma

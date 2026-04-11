@@ -100,10 +100,69 @@ export default function OnboardingScreen({ navigation }: any) {
       id: 'relationship', key: 'relationship_type', type: 'chips' as QuestionType,
       text: t('onboarding.qRelationship'),
       chips: [
-        { label: t('onboarding.serious'), value: 'serious' },
-        { label: t('onboarding.casual'), value: 'casual' },
-        { label: t('onboarding.open'), value: 'open' },
+        { label: t('onboarding.intentLifePartner'), value: 'life_partner' },
+        { label: t('onboarding.intentLongTerm'), value: 'long_term' },
+        { label: t('onboarding.intentLongOpenShort'), value: 'long_open_short' },
+        { label: t('onboarding.intentShortOpenLong'), value: 'short_open_long' },
+        { label: t('onboarding.intentShortTerm'), value: 'short_term' },
+        { label: t('onboarding.intentFiguringOut'), value: 'figuring_out' },
       ],
+    },
+    {
+      id: 'family_plans', key: 'family_plans', type: 'chips' as QuestionType,
+      text: t('onboarding.qFamilyPlans'),
+      chips: [
+        { label: t('onboarding.familyWant'), value: 'want' },
+        { label: t('onboarding.familyDontWant'), value: 'dont_want' },
+        { label: t('onboarding.familyOpen'), value: 'open' },
+        { label: t('onboarding.familyNotSure'), value: 'not_sure' },
+      ],
+      optional: true,
+    },
+    {
+      id: 'religion', key: 'religion', type: 'chips' as QuestionType,
+      text: t('onboarding.qReligion'),
+      chips: [
+        { label: t('onboarding.relMuslim'), value: 'muslim' },
+        { label: t('onboarding.relChristian'), value: 'christian' },
+        { label: t('onboarding.relJewish'), value: 'jewish' },
+        { label: t('onboarding.relBuddhist'), value: 'buddhist' },
+        { label: t('onboarding.relHindu'), value: 'hindu' },
+        { label: t('onboarding.relAgnostic'), value: 'agnostic' },
+        { label: t('onboarding.relAtheist'), value: 'atheist' },
+        { label: t('onboarding.relSpiritual'), value: 'spiritual' },
+        { label: t('onboarding.relOther'), value: 'other' },
+        { label: t('onboarding.relPreferNotSay'), value: 'prefer_not_say' },
+      ],
+      optional: true,
+    },
+    {
+      id: 'alcohol', key: 'alcohol', type: 'chips' as QuestionType,
+      text: t('onboarding.qAlcohol'),
+      chips: [
+        { label: t('onboarding.yes'), value: 'yes' },
+        { label: t('onboarding.no'), value: 'no' },
+        { label: t('onboarding.sometimes'), value: 'sometimes' },
+        { label: t('onboarding.preferNotSay'), value: 'prefer_not_say' },
+      ],
+      optional: true,
+    },
+    {
+      id: 'smoking', key: 'smoking', type: 'chips' as QuestionType,
+      text: t('onboarding.qSmoking'),
+      chips: [
+        { label: t('onboarding.yes'), value: 'yes' },
+        { label: t('onboarding.no'), value: 'no' },
+        { label: t('onboarding.sometimes'), value: 'sometimes' },
+        { label: t('onboarding.preferNotSay'), value: 'prefer_not_say' },
+      ],
+      optional: true,
+    },
+    {
+      id: 'education', key: 'education', type: 'text' as QuestionType,
+      text: t('onboarding.qEducation'),
+      placeholder: t('onboarding.placeholderEducation'),
+      optional: true,
     },
     {
       id: 'job', key: 'job', type: 'text' as QuestionType,
@@ -332,11 +391,31 @@ export default function OnboardingScreen({ navigation }: any) {
         age_min: ageMin,
         age_max: ageMax,
         relationship_type: finalAnswers.relationship_type,
+        dating_intention: finalAnswers.relationship_type,
+        family_plans: finalAnswers.family_plans || null,
+        education: finalAnswers.education || null,
+        religion: finalAnswers.religion || null,
+        alcohol: finalAnswers.alcohol || null,
+        smoking: finalAnswers.smoking || null,
         photos: photoUrl ? [photoUrl] : [],
       });
 
       const personality = `${finalAnswers.personality} Meslek: ${finalAnswers.job || 'belirtilmedi'}. ${finalAnswers.extra || ''}`.trim();
-      const systemPrompt = buildAgentSystemPrompt(personality, finalAnswers.looking_for, finalAnswers.dealbreakers);
+      const profileContext = {
+        dating_intention: finalAnswers.relationship_type,
+        family_plans: finalAnswers.family_plans,
+        religion: finalAnswers.religion,
+        alcohol: finalAnswers.alcohol,
+        smoking: finalAnswers.smoking,
+        education: finalAnswers.education,
+      };
+      const systemPrompt = buildAgentSystemPrompt(
+        personality,
+        finalAnswers.looking_for,
+        finalAnswers.dealbreakers,
+        undefined,
+        profileContext
+      );
 
       await supabase.from('agents').upsert({
         user_id: user.id,

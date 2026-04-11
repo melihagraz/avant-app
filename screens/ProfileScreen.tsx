@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ScrollView, Image, ActivityIndicator, Alert, Linking, Platform,
+  ScrollView, Image, ActivityIndicator, Alert, Linking, Platform, Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -32,6 +32,7 @@ interface UserProfile {
   relationship_type: string;
   photos: string[];
   is_premium?: boolean;
+  notifications_enabled?: boolean;
 }
 
 export default function ProfileScreen({ navigation }: any) {
@@ -277,8 +278,27 @@ export default function ProfileScreen({ navigation }: any) {
       serious: t('profile.relationSerious'),
       casual: t('profile.relationCasual'),
       open: t('profile.relationOpen'),
+      life_partner: t('onboarding.intentLifePartner'),
+      long_term: t('onboarding.intentLongTerm'),
+      long_open_short: t('onboarding.intentLongOpenShort'),
+      short_open_long: t('onboarding.intentShortOpenLong'),
+      short_term: t('onboarding.intentShortTerm'),
+      figuring_out: t('onboarding.intentFiguringOut'),
     };
     return map[type] || type;
+  };
+
+  const toggleNotifications = async (value: boolean) => {
+    if (!profile) return;
+    setProfile({ ...profile, notifications_enabled: value });
+    try {
+      await supabase.from('users').update({ notifications_enabled: value }).eq('id', profile.id);
+      trackEvent('notifications_toggle', { enabled: value });
+    } catch (err) {
+      captureError(err, { context: 'toggle_notifications' });
+      // Revert on error
+      setProfile({ ...profile, notifications_enabled: !value });
+    }
   };
 
   if (loading) {
@@ -416,6 +436,22 @@ export default function ProfileScreen({ navigation }: any) {
             ))}
           </View>
 
+          <View style={[s.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Text style={[s.cardTitle, { color: colors.textSecondary }]}>{t('profile.notificationsTitle')}</Text>
+            <View style={[s.notifRow, { borderBottomWidth: 0 }]}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={[s.rowValue, { color: colors.textPrimary }]}>{t('profile.notificationsEnabled')}</Text>
+                <Text style={[s.rowLabel, { color: colors.textSecondary, marginTop: 2 }]}>{t('profile.notificationsDesc')}</Text>
+              </View>
+              <Switch
+                value={profile.notifications_enabled !== false}
+                onValueChange={toggleNotifications}
+                trackColor={{ false: colors.border, true: colors.accentPurple }}
+                thumbColor={colors.white}
+              />
+            </View>
+          </View>
+
           <View style={[s.agentCard, { backgroundColor: colors.card }]}>
             <View style={s.agentDotWrap}>
               <View style={s.agentDot} />
@@ -495,6 +531,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F5F0FA' },
   rowLabel: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
   rowValue: { fontSize: 15, color: '#2D1B4E', fontWeight: '700' },
+  notifRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
   agentCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 22, padding: 18, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 },
   agentDotWrap: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center' },
   agentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },

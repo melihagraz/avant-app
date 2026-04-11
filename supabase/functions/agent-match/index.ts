@@ -239,14 +239,14 @@ async function runAgentConversation(conversationId: string, model: string) {
 
     try {
       const avgScore = Math.round(((agentAVerdict.score || 0) + (agentBVerdict.score || 0)) / 2);
-      const { data: userA } = await supabase.from("users").select("name, push_token").eq("id", conv.agent_a.user_id).single();
-      const { data: userB } = await supabase.from("users").select("name, push_token").eq("id", conv.agent_b.user_id).single();
+      const { data: userA } = await supabase.from("users").select("name, push_token, notifications_enabled").eq("id", conv.agent_a.user_id).single();
+      const { data: userB } = await supabase.from("users").select("name, push_token, notifications_enabled").eq("id", conv.agent_b.user_id).single();
 
       const notifications: any[] = [];
-      if (userA?.push_token) {
+      if (userA?.push_token && userA?.notifications_enabled !== false) {
         notifications.push({ to: userA.push_token, title: "Yeni esleme! 🎉", body: `Agentin ${userB?.name || "biri"} ile eslesti — ${avgScore} uyum puani`, sound: "default" });
       }
-      if (userB?.push_token) {
+      if (userB?.push_token && userB?.notifications_enabled !== false) {
         notifications.push({ to: userB.push_token, title: "Yeni esleme! 🎉", body: `Agentin ${userA?.name || "biri"} ile eslesti — ${avgScore} uyum puani`, sound: "default" });
       }
       if (notifications.length > 0) {
