@@ -3,7 +3,7 @@
     "name": "avant",
     "scheme": "avant",
     "slug": "avant",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -34,7 +34,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -65,14 +66,14 @@
         }
       ]
     ],
-    "owner": "melihagraz4",
     "extra": {
       "supabaseUrl": "https://ertyxalazqtmdowjdzsq.supabase.co",
       "supabaseAnonKey": "sb_publishable_MYoZp-UGpXA8s4JzutonGQ_YUOr2-FB",
       "sentryDsn": "",
       "eas": {
-        "projectId": "997d2e6d-f39d-4138-bbb6-031a8b72af54"
+        "projectId": "819175da-47d1-4fd6-a1bc-f3362ada8d2e"
       }
-    }
+    },
+    "owner": "melihagraz"
   }
 }
