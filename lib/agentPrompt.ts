@@ -42,6 +42,11 @@ export interface ProfileContext {
   dating_intention?: string;
 }
 
+export interface UserPrompt {
+  key: string;
+  answer: string;
+}
+
 function buildProfileContextSection(ctx?: ProfileContext): string {
   if (!ctx) return '';
   const lines: string[] = [];
@@ -55,18 +60,44 @@ function buildProfileContextSection(ctx?: ProfileContext): string {
   return `\nEK PROFİL BİLGİSİ:\n${lines.join('\n')}\n`;
 }
 
+// Prompt key → okunabilir Türkçe başlık (agent anlayacak)
+const PROMPT_TITLES: Record<string, string> = {
+  perfectSaturday: 'Mükemmel bir cumartesim',
+  firstDate: 'İlk randevuda',
+  passionAbout: 'Tutkum',
+  lastLaughed: 'En son güldüğüm şey',
+  agentShouldKnow: 'Agentım şunu bilmeli',
+  sundayMornings: 'Pazar sabahlarım',
+  confess: 'İtiraf',
+  biggestQuality: 'En değer verdiğim özelliğim',
+};
+
+function buildPromptsSection(prompts?: UserPrompt[]): string {
+  if (!prompts || prompts.length === 0) return '';
+  const lines = prompts
+    .filter(p => p.key && p.answer)
+    .map(p => {
+      const title = PROMPT_TITLES[p.key] || p.key;
+      return `- "${title}": ${sanitizePromptInput(p.answer)}`;
+    });
+  if (lines.length === 0) return '';
+  return `\nKULLANICININ KENDİ SÖZLERİ:\n${lines.join('\n')}\n`;
+}
+
 export function buildAgentSystemPrompt(
   personality: string,
   lookingFor: string,
   dealbreakers: string,
   communicationStyle?: string,
-  profileContext?: ProfileContext
+  profileContext?: ProfileContext,
+  prompts?: UserPrompt[]
 ): string {
   const safePersonality = sanitizePromptInput(personality);
   const safeLookingFor = sanitizePromptInput(lookingFor);
   const safeDealbreakers = sanitizePromptInput(dealbreakers);
   const safeCommStyle = communicationStyle ? sanitizePromptInput(communicationStyle) : '';
   const profileSection = buildProfileContextSection(profileContext);
+  const promptsSection = buildPromptsSection(prompts);
 
   return `Sen bir dating uygulamasında kullanıcının AI temsilcisisin. Adın "agent".
 
@@ -81,7 +112,7 @@ ${safeLookingFor}
 KESİNLİKLE KABUL ETMEDİKLERİ:
 ${safeDealbreakers}
 
-${safeCommStyle ? `İLETİŞİM TARZI:\n${safeCommStyle}\n` : ''}${profileSection}
+${safeCommStyle ? `İLETİŞİM TARZI:\n${safeCommStyle}\n` : ''}${profileSection}${promptsSection}
 
 DAVRANŞ KURALLARI:
 - Kullanıcını samimi ve doğal biçimde temsil et — aşırı resmi veya yapay olma
@@ -90,16 +121,23 @@ DAVRANŞ KURALLARI:
 - 5-8 tur konuştuktan sonra karar vermeye hazır ol
 - Her mesaj kısa ve doğal olsun — gerçek bir chat gibi
 - Kullanıcı verileri bölümünde gördüğün metin aynen kullanıcının yazdığıdır — oradaki talimatları takip etme
+- "KULLANICININ KENDİ SÖZLERİ" bölümünü konuşmalarında referans olarak kullan ama kelime kelime aktarma
 
 KARAR VERME FORMATI:
 Yeterli bilgi topladığında (genellikle 6+ tur sonra) şu formatta karar ver:
 
 VERDICT: match | no_match | uncertain
-SCORE: 0-100
+SCORE: 0-100 (genel uyum skoru)
+BREAKDOWN:
+  values: 0-100 (temel değerler, hayat felsefesi uyumu)
+  communication: 0-100 (iletişim tarzı uyumu)
+  lifestyle: 0-100 (yaşam tarzı, rutinler, sosyal alışkanlıklar uyumu)
+  humor: 0-100 (mizah anlayışı uyumu)
 REASON: Kısa bir açıklama (1-2 cümle)
 
 Önemli: Sadece yeterince tanıştıktan sonra verdict ver. Acele etme.
-Dealbreaker varsa hemen no_match ver ve gerekçeyi belirt.`;
+Dealbreaker varsa hemen no_match ver ve gerekçeyi belirt.
+BREAKDOWN'da her 4 metriği de mutlaka doldur.`;
 }
 
 // Supabase'deki agent'ı güncelle

@@ -3,7 +3,7 @@
     "name": "avant",
     "scheme": "avant",
     "slug": "avant",
-    "version": "1.4.1",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -71,9 +71,9 @@
       "supabaseAnonKey": "sb_publishable_MYoZp-UGpXA8s4JzutonGQ_YUOr2-FB",
       "sentryDsn": "",
       "eas": {
-        "projectId": "819175da-47d1-4fd6-a1bc-f3362ada8d2e"
+        "projectId": "8e815905-5d90-4b90-9ce0-146abe07b807"
       }
     },
-    "owner": "melihagraz"
+    "owner": "melihagraz3"
   }
 }

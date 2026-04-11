@@ -12,7 +12,15 @@ const COMPACT_SYSTEM_SUFFIX = `
 ÖZET KURALLAR:
 - Kısa mesajlar (2-3 cümle max)
 - 6 turdan sonra karar ver
-- Format: VERDICT: match|no_match SCORE: 0-100 REASON: tek cümle`;
+- Format:
+  VERDICT: match|no_match
+  SCORE: 0-100 (genel uyum)
+  BREAKDOWN:
+    values: 0-100 (temel değerler, hayat felsefesi)
+    communication: 0-100 (iletişim tarzı uyumu)
+    lifestyle: 0-100 (yaşam tarzı, rutinler, sosyal alışkanlıklar)
+    humor: 0-100 (mizah anlayışı)
+  REASON: tek cümle`;
 
 interface Message {
   role: "user" | "assistant";
@@ -20,10 +28,18 @@ interface Message {
   speaker: "agent_a" | "agent_b";
 }
 
+interface CompatibilityBreakdown {
+  values: number;
+  communication: number;
+  lifestyle: number;
+  humor: number;
+}
+
 interface AgentVerdict {
   verdict: "match" | "no_match" | "uncertain";
   score: number;
   reason: string;
+  breakdown: CompatibilityBreakdown | null;
 }
 
 const MAX_RETRIES = 3;
@@ -99,10 +115,26 @@ function parseVerdict(text: string): AgentVerdict | null {
 
   if (!verdictMatch) return null;
 
+  // 4-metrik compatibility breakdown parsing
+  const metrics: Array<keyof CompatibilityBreakdown> = ['values', 'communication', 'lifestyle', 'humor'];
+  const breakdown: Partial<CompatibilityBreakdown> = {};
+  for (const m of metrics) {
+    const regex = new RegExp(`${m}:\\s*(\\d+)`, 'i');
+    const match = text.match(regex);
+    if (match) breakdown[m] = parseInt(match[1]);
+  }
+
+  // Tüm 4 metrik varsa dolu object, yoksa null
+  const fullBreakdown: CompatibilityBreakdown | null =
+    Object.keys(breakdown).length === 4
+      ? breakdown as CompatibilityBreakdown
+      : null;
+
   return {
     verdict: verdictMatch[1].toLowerCase() as "match" | "no_match" | "uncertain",
     score: scoreMatch ? parseInt(scoreMatch[1]) : 50,
     reason: reasonMatch ? reasonMatch[1].trim() : "",
+    breakdown: fullBreakdown,
   };
 }
 
@@ -212,6 +244,21 @@ async function runAgentConversation(conversationId: string, model: string) {
       ? "matched"
       : "not_matched";
 
+  // Compatibility breakdown: Her iki agent'ın breakdown'larının ortalaması alınır
+  let mergedBreakdown: CompatibilityBreakdown | null = null;
+  if (agentAVerdict.breakdown && agentBVerdict.breakdown) {
+    mergedBreakdown = {
+      values: Math.round((agentAVerdict.breakdown.values + agentBVerdict.breakdown.values) / 2),
+      communication: Math.round((agentAVerdict.breakdown.communication + agentBVerdict.breakdown.communication) / 2),
+      lifestyle: Math.round((agentAVerdict.breakdown.lifestyle + agentBVerdict.breakdown.lifestyle) / 2),
+      humor: Math.round((agentAVerdict.breakdown.humor + agentBVerdict.breakdown.humor) / 2),
+    };
+  } else if (agentAVerdict.breakdown) {
+    mergedBreakdown = agentAVerdict.breakdown;
+  } else if (agentBVerdict.breakdown) {
+    mergedBreakdown = agentBVerdict.breakdown;
+  }
+
   await supabase.from("agent_conversations").update({
     messages,
     turn_count: turnCount,
@@ -221,6 +268,7 @@ async function runAgentConversation(conversationId: string, model: string) {
     agent_b_score: agentBVerdict.score,
     agent_b_verdict: agentBVerdict.verdict,
     agent_b_reasoning: agentBVerdict.reason,
+    compatibility_breakdown: mergedBreakdown,
     final_result: finalResult,
     completed_at: new Date().toISOString(),
   }).eq("id", conversationId);

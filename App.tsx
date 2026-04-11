@@ -1,8 +1,10 @@
 // App.tsx
+import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Linking, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { supabase } from './lib/supabase';
 import { registerForPushNotifications, savePushToken } from './lib/notifications';
@@ -21,6 +23,8 @@ import HomeScreen from './screens/HomeScreen';
 import HumanChatScreen from './screens/HumanChatScreen';
 import AgentLogScreen from './screens/AgentLogScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import ProfileDetailScreen from './screens/ProfileDetailScreen';
+import MatchRevealScreen from './screens/MatchRevealScreen';
 
 // Sentry'yi uygulama yüklenmeden önce başlat
 initSentry();
@@ -184,6 +188,19 @@ function AppContent() {
         <Stack.Screen name="HumanChat" component={HumanChatScreen} />
         <Stack.Screen name="AgentLog" component={AgentLogScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen
+          name="ProfileDetail"
+          component={ProfileDetailScreen}
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="MatchReveal"
+          component={MatchRevealScreen}
+          options={{
+            presentation: 'transparentModal',
+            animation: 'fade',
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
     </View>
@@ -192,9 +209,11 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AppContent />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, SafeAreaView,
-  ActivityIndicator, Image, Alert,
+  ActivityIndicator, Image, Alert, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,7 +18,7 @@ import { moderateText, getModerationMessage } from '../lib/moderation';
 
 const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
-type QuestionType = 'text' | 'number' | 'chips' | 'chips_multi' | 'photo';
+type QuestionType = 'text' | 'number' | 'chips' | 'chips_multi' | 'photo' | 'prompts';
 
 interface Chip { label: string; value: string }
 interface Question {
@@ -181,6 +181,10 @@ export default function OnboardingScreen({ navigation }: any) {
       optional: true,
     },
     {
+      id: 'prompts', key: 'prompts', type: 'prompts' as QuestionType,
+      text: `${t('prompts.ui.title')}\n\n${t('prompts.ui.subtitle')}`,
+    },
+    {
       id: 'photo', key: 'photo', type: 'photo' as QuestionType,
       text: (a: Record<string, string>) => t('onboarding.qPhoto', { name: a.name }),
     },
@@ -195,6 +199,13 @@ export default function OnboardingScreen({ navigation }: any) {
   const [saving, setSaving] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  // Prompts state
+  const [selectedPrompts, setSelectedPrompts] = useState<Array<{ key: string; answer: string }>>([]);
+  const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
+  const [promptAnswer, setPromptAnswer] = useState('');
+
+  const PROMPT_KEYS = ['perfectSaturday', 'firstDate', 'passionAbout', 'lastLaughed', 'agentShouldKnow', 'sundayMornings', 'confess', 'biggestQuality'];
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -296,6 +307,45 @@ export default function OnboardingScreen({ navigation }: any) {
     setSelectedChips([]);
     setStep(prevStep);
     trackEvent('onboarding_back', { from: step, to: prevStep });
+  };
+
+  const openPromptModal = (key: string) => {
+    if (busy) return;
+    const existing = selectedPrompts.find(p => p.key === key);
+    setPromptAnswer(existing?.answer || '');
+    setActivePromptKey(key);
+  };
+
+  const savePromptAnswer = () => {
+    if (!activePromptKey) return;
+    const trimmed = promptAnswer.trim();
+    if (trimmed.length < 3) return;
+
+    // Moderation check
+    const modResult = moderateText(trimmed);
+    if (!modResult.clean) {
+      Alert.alert(t('common.error'), t(getModerationMessage(modResult.reason || '')));
+      return;
+    }
+
+    setSelectedPrompts(prev => {
+      const others = prev.filter(p => p.key !== activePromptKey);
+      // Zaten 3 tane varsa ve bu yeni değilse (rewrite), eskiyi kaldırıp yeni koy
+      // 3 tane varsa ve bu yeniyse izin verme
+      if (others.length >= 3 && !prev.find(p => p.key === activePromptKey)) {
+        return prev;
+      }
+      return [...others, { key: activePromptKey, answer: trimmed }];
+    });
+    setActivePromptKey(null);
+    setPromptAnswer('');
+  };
+
+  const removePrompt = () => {
+    if (!activePromptKey) return;
+    setSelectedPrompts(prev => prev.filter(p => p.key !== activePromptKey));
+    setActivePromptKey(null);
+    setPromptAnswer('');
   };
 
   const detectCity = async () => {
@@ -415,6 +465,16 @@ export default function OnboardingScreen({ navigation }: any) {
         }
       }
 
+      // Prompts JSON parse (onboarding'de stringle kaydettik)
+      let userPrompts: Array<{ key: string; answer: string }> = [];
+      if (finalAnswers.prompts) {
+        try {
+          userPrompts = JSON.parse(finalAnswers.prompts);
+        } catch {
+          userPrompts = [];
+        }
+      }
+
       await supabase.from('users').upsert({
         id: user.id,
         email: user.email,
@@ -432,6 +492,7 @@ export default function OnboardingScreen({ navigation }: any) {
         religion: finalAnswers.religion || null,
         alcohol: finalAnswers.alcohol || null,
         smoking: finalAnswers.smoking || null,
+        prompts: userPrompts,
         photos: photoUrl ? [photoUrl] : [],
       });
 
@@ -449,7 +510,8 @@ export default function OnboardingScreen({ navigation }: any) {
         finalAnswers.looking_for,
         finalAnswers.dealbreakers,
         undefined,
-        profileContext
+        profileContext,
+        userPrompts
       );
 
       await supabase.from('agents').upsert({
@@ -503,6 +565,7 @@ export default function OnboardingScreen({ navigation }: any) {
               const showOptional = isAgent && msgQ?.optional && msgQ.type !== 'photo' && isLastMsg && !busy;
               const showPhoto = isAgent && msgQ?.type === 'photo' && isLastMsg && !busy;
               const showLocationBtn = isAgent && msgQ?.id === 'city' && isLastMsg && !busy;
+              const showPromptsUI = isAgent && msgQ?.type === 'prompts' && isLastMsg && !busy;
 
               return (
                 <View key={i}>
@@ -602,6 +665,68 @@ export default function OnboardingScreen({ navigation }: any) {
                       )}
                     </TouchableOpacity>
                   )}
+
+                  {showPromptsUI && (
+                    <View style={s.promptsWrap}>
+                      {PROMPT_KEYS.map(key => {
+                        const selected = selectedPrompts.find(p => p.key === key);
+                        const isSelected = !!selected;
+                        return (
+                          <TouchableOpacity
+                            key={key}
+                            style={[
+                              s.promptChip,
+                              { backgroundColor: colors.card, borderColor: colors.border },
+                              isSelected && { borderColor: colors.accentPink, backgroundColor: colors.inputBg },
+                            ]}
+                            onPress={() => openPromptModal(key)}
+                          >
+                            <Text style={[s.promptChipTitle, { color: colors.textPrimary }]}>
+                              {t(`prompts.pool.${key}`)}
+                            </Text>
+                            {isSelected && selected!.answer ? (
+                              <Text style={[s.promptChipAnswer, { color: colors.textSecondary }]} numberOfLines={2}>
+                                {selected!.answer}
+                              </Text>
+                            ) : (
+                              <Text style={[s.promptChipHint, { color: colors.placeholder }]}>
+                                {t('prompts.ui.answerPlaceholder')}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+
+                      <TouchableOpacity
+                        style={[
+                          s.promptsContinue,
+                          selectedPrompts.filter(p => p.answer).length < 3 && s.promptsContinueOff,
+                        ]}
+                        disabled={selectedPrompts.filter(p => p.answer).length < 3}
+                        onPress={() => {
+                          const ready = selectedPrompts.filter(p => p.answer);
+                          advance(t('prompts.ui.ready'), JSON.stringify(ready));
+                        }}
+                      >
+                        <LinearGradient
+                          colors={
+                            selectedPrompts.filter(p => p.answer).length < 3
+                              ? (colors.disabledGradient as any)
+                              : (colors.accentGradientAlt as any)
+                          }
+                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                          style={s.promptsContinueGrad}
+                        >
+                          <Text style={s.promptsContinueTxt}>
+                            {selectedPrompts.filter(p => p.answer).length >= 3
+                              ? t('onboarding.devamBtn')
+                              : t('prompts.ui.selectMore', { count: 3 - selectedPrompts.filter(p => p.answer).length })
+                            }
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -647,6 +772,65 @@ export default function OnboardingScreen({ navigation }: any) {
           )}
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Prompt answer modal */}
+      <Modal
+        visible={!!activePromptKey}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActivePromptKey(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={s.promptModalOverlay}
+        >
+          <View style={[s.promptModal, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Text style={[s.promptModalTitle, { color: colors.textPrimary }]}>
+              {activePromptKey ? t(`prompts.pool.${activePromptKey}`) : ''}
+            </Text>
+            <TextInput
+              style={[s.promptModalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }]}
+              placeholder={t('prompts.ui.answerPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              value={promptAnswer}
+              onChangeText={setPromptAnswer}
+              multiline
+              maxLength={200}
+              autoFocus
+            />
+            <View style={s.promptModalActions}>
+              {selectedPrompts.find(p => p.key === activePromptKey) && (
+                <TouchableOpacity onPress={removePrompt} style={s.promptModalRemove}>
+                  <Text style={[s.promptModalRemoveTxt, { color: colors.error }]}>
+                    {t('common.delete')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => setActivePromptKey(null)}
+                style={s.promptModalCancel}
+              >
+                <Text style={[s.promptModalCancelTxt, { color: colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={savePromptAnswer}
+                disabled={promptAnswer.trim().length < 3}
+                style={[s.promptModalSave, promptAnswer.trim().length < 3 && { opacity: 0.4 }]}
+              >
+                <LinearGradient
+                  colors={colors.accentGradientAlt as any}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={s.promptModalSaveGrad}
+                >
+                  <Text style={s.promptModalSaveTxt}>{t('common.save')}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -692,6 +876,43 @@ const s = StyleSheet.create({
   skipTxt: { fontSize: 14, color: '#C4B5D0', fontWeight: '600' },
   locationBtn: { marginLeft: 42, marginTop: 10, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 22, borderWidth: 2, alignSelf: 'flex-start', minWidth: 170, alignItems: 'center' },
   locationBtnTxt: { fontSize: 15, fontWeight: '700' },
+
+  // Prompts UI
+  promptsWrap: { marginLeft: 42, marginTop: 12, gap: 10 },
+  promptChip: {
+    borderRadius: 20, borderWidth: 2, padding: 14, paddingVertical: 12,
+  },
+  promptChipTitle: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  promptChipAnswer: { fontSize: 13, fontWeight: '500', lineHeight: 18 },
+  promptChipHint: { fontSize: 12, fontWeight: '500', fontStyle: 'italic' },
+  promptsContinue: { marginTop: 6, borderRadius: 26, overflow: 'hidden' },
+  promptsContinueOff: { opacity: 0.6 },
+  promptsContinueGrad: { padding: 14, alignItems: 'center', borderRadius: 26 },
+  promptsContinueTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // Prompt modal
+  promptModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  promptModal: {
+    borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    padding: 24, paddingBottom: 40,
+    shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 12,
+  },
+  promptModalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
+  promptModalInput: {
+    borderRadius: 18, padding: 16, fontSize: 16, fontWeight: '500',
+    minHeight: 100, borderWidth: 2, marginBottom: 16, textAlignVertical: 'top',
+  },
+  promptModalActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  promptModalRemove: { padding: 10 },
+  promptModalRemoveTxt: { fontSize: 14, fontWeight: '700' },
+  promptModalCancel: { padding: 10, flex: 1, alignItems: 'flex-end' },
+  promptModalCancelTxt: { fontSize: 15, fontWeight: '700' },
+  promptModalSave: { borderRadius: 22, overflow: 'hidden' },
+  promptModalSaveGrad: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 22 },
+  promptModalSaveTxt: { fontSize: 15, fontWeight: '800', color: '#fff' },
   photoStep: { marginLeft: 42, marginTop: 14, gap: 14 },
   photoPreviewWrap: { position: 'relative', alignSelf: 'flex-start' },
   photoPreview: { width: 130, height: 170, borderRadius: 22, backgroundColor: '#F8F5FC' },

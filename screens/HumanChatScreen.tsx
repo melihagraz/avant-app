@@ -138,7 +138,7 @@ export default function HumanChatScreen({ route, navigation }: any) {
     if (error) {
       captureError(error, { context: 'send_message', match_id: matchId });
       // Mesajı kuyruğa al (offline gönderim)
-      await queueMessage(tempMsg);
+      await queueMessage({ ...tempMsg, match_id: matchId });
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, failed: true } : m));
       Alert.alert(t('common.error'), t('chat.sendError'));
       return;

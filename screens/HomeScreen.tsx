@@ -7,6 +7,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import SwipeDeck from '../components/SwipeDeck';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
@@ -21,6 +22,7 @@ interface Match {
   agent_a_score: number;
   agent_b_score: number;
   agent_a_reasoning: string;
+  compatibility_breakdown?: { values: number; communication: number; lifestyle: number; humor: number } | null;
   has_messages: boolean;
   last_message?: string;
   last_message_at?: string;
@@ -204,9 +206,52 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  const fetchSingleMatch = async (matchId: string, userId: string): Promise<Match | null> => {
+    try {
+      const { data } = await supabase
+        .from('matches')
+        .select(`
+          id, created_at, user_a_id, user_b_id,
+          conversation:conversation_id(agent_a_score, agent_b_score, agent_a_reasoning, compatibility_breakdown)
+        `)
+        .eq('id', matchId)
+        .single();
+
+      if (!data) return null;
+
+      const otherUserId = data.user_a_id === userId ? data.user_b_id : data.user_a_id;
+      const { data: otherUser } = await supabase
+        .from('users').select('id, name, age, city, photos').eq('id', otherUserId).single();
+
+      const conv = data.conversation as any;
+      return {
+        id: data.id,
+        created_at: data.created_at,
+        other_user: otherUser || { id: otherUserId, name: '?', age: 0, city: '', photos: [] },
+        agent_a_score: conv?.agent_a_score || 0,
+        agent_b_score: conv?.agent_b_score || 0,
+        agent_a_reasoning: conv?.agent_a_reasoning || '',
+        compatibility_breakdown: conv?.compatibility_breakdown || null,
+        has_messages: false,
+      } as Match;
+    } catch (err) {
+      captureError(err, { context: 'fetch_single_match' });
+      return null;
+    }
+  };
+
   const subscribeToMatches = (userId: string) => {
     const channel = supabase.channel('new-matches')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches' }, async (payload) => {
+        const matchRow: any = payload.new;
+        // Yeni match bu kullanıcıya ait mi?
+        if (matchRow.user_a_id === userId || matchRow.user_b_id === userId) {
+          const fullMatch = await fetchSingleMatch(matchRow.id, userId);
+          if (fullMatch) {
+            // Cinematic reveal modal
+            navigation.navigate('MatchReveal', { match: fullMatch });
+          }
+        }
         fetchMatches(userId);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'human_messages' }, () => {
@@ -258,39 +303,16 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </View>
 
-        <View style={s.cardBody}>
-          {match.agent_a_reasoning ? (
+        {match.agent_a_reasoning ? (
+          <View style={s.cardBody}>
             <View style={[s.reasonCard, { backgroundColor: colors.inputBg }]}>
               <Text style={[s.reasonTxt, { color: colors.textMuted }]} numberOfLines={2}>
                 <Text style={[s.reasonLabel, { color: colors.userBubble }]}>{t('home.agentSays')}</Text>
                 "{match.agent_a_reasoning}"
               </Text>
             </View>
-          ) : null}
-          <View style={s.actions}>
-            <TouchableOpacity
-              style={[s.btnPass, { borderColor: colors.border, backgroundColor: colors.card }]}
-              onPress={() => {
-                trackEvent('match_dismiss', { match_id: match.id });
-                setDismissed(prev => [...prev, match.id]);
-              }}
-            >
-              <Text style={[s.btnPassTxt, { color: colors.textSecondary }]}>{t('home.pass')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.btnChat}
-              onPress={() => {
-                trackEvent('chat_start', { match_id: match.id });
-                navigation.navigate('HumanChat', { matchId: match.id, otherUser: match.other_user });
-                setActiveTab('messages');
-              }}
-            >
-              <LinearGradient colors={colors.accentGradientAlt as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.btnChatGrad}>
-                <Text style={s.btnChatTxt}>{t('home.startChat')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
-        </View>
+        ) : null}
       </View>
     );
   };
@@ -424,7 +446,26 @@ export default function HomeScreen({ navigation }: any) {
                   <Text style={s.emptyHeroHint}>{t('home.emptyHint')}</Text>
                 </LinearGradient>
               ) : (
-                newMatches.map((m, i) => renderMatchCard(m, i))
+                <View style={s.deckWrap}>
+                  <SwipeDeck<Match>
+                    data={newMatches}
+                    keyExtractor={(m) => m.id}
+                    renderCard={(m, i) => renderMatchCard(m, i)}
+                    onSwipeLeft={(m) => {
+                      trackEvent('swipe_left', { match_id: m.id });
+                      setDismissed(prev => [...prev, m.id]);
+                    }}
+                    onSwipeRight={(m) => {
+                      trackEvent('swipe_right', { match_id: m.id });
+                      navigation.navigate('HumanChat', { matchId: m.id, otherUser: m.other_user });
+                      setActiveTab('messages');
+                    }}
+                    onSwipeUp={(m) => {
+                      trackEvent('swipe_up', { match_id: m.id });
+                      navigation.navigate('ProfileDetail', { userId: m.other_user.id, matchId: m.id });
+                    }}
+                  />
+                </View>
               )}
             </>
           )}
@@ -575,6 +616,12 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: 40 },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: '#2D1B4E' },
   emptySub: { fontSize: 15, color: '#9B8AB8', textAlign: 'center', lineHeight: 22 },
+  deckWrap: {
+    height: 620,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginTop: 8,
+  },
   emptyHero: {
     margin: 20, marginTop: 28, borderRadius: 36, padding: 40, alignItems: 'center',
     shadowColor: '#C084FC', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.35, shadowRadius: 40, elevation: 16,

@@ -7,6 +7,63 @@
     "generic": "Bu içerik gönderilemedi.",
     "rateLimited": "Çok hızlı gidiyorsun! {{seconds}} saniye bekle."
   },
+
+  "compatibility": {
+    "values": "Değerler",
+    "communication": "İletişim",
+    "lifestyle": "Yaşam tarzı",
+    "humor": "Mizah"
+  },
+
+  "prompts": {
+    "pool": {
+      "perfectSaturday": "Mükemmel bir cumartesim...",
+      "firstDate": "İlk randevuda seni götürmek istediğim yer...",
+      "passionAbout": "Tutkum...",
+      "lastLaughed": "En son buna güldüm...",
+      "agentShouldKnow": "Agentım şunu bilmeli...",
+      "sundayMornings": "Pazar sabahlarım genelde...",
+      "confess": "İtiraf ediyorum...",
+      "biggestQuality": "En değer verdiğim özelliğim..."
+    },
+    "ui": {
+      "title": "Kendini tanıt 💜",
+      "subtitle": "3 soru seç ve kısa bir cevap yaz",
+      "selectMore": "{{count}} soru daha seç",
+      "ready": "Harika, devam edebiliriz!",
+      "answerPlaceholder": "Cevabını yaz...",
+      "selected": "Seçili"
+    }
+  },
+
+  "profileDetail": {
+    "compatibilityTitle": "Uyumluluk analizi",
+    "agentSays": "🤖 Senin agentın diyor ki",
+    "promptsTitle": "Hakkında",
+    "infoTitle": "Bilgiler",
+    "sendMessage": "Mesaj gönder 💬",
+    "pass": "Geç",
+    "kmAway": "{{km}} km uzakta",
+    "back": "Geri"
+  },
+
+  "matchReveal": {
+    "title": "EŞLEŞME!",
+    "subtitle": "Agentların eşleşti ✨",
+    "compatibilityScore": "{{score}} uyum",
+    "sayHi": "Merhaba de 💬",
+    "viewProfile": "Profili gör",
+    "notNow": "Şimdilik kapat"
+  },
+
+  "swipe": {
+    "like": "BEĞEN",
+    "pass": "GEÇ",
+    "details": "DETAY",
+    "empty": "Tüm eşleşmelerini gördün 🎉",
+    "emptySub": "Agentın çalışmaya devam ediyor, yeni eşleşmeler yakında"
+  },
+
   "common": {
     "error": "Hata",
     "retry": "Tekrar dene",

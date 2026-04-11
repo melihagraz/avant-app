@@ -7,6 +7,63 @@
     "generic": "This content couldn't be sent.",
     "rateLimited": "Slow down! Wait {{seconds}} seconds."
   },
+
+  "compatibility": {
+    "values": "Values",
+    "communication": "Communication",
+    "lifestyle": "Lifestyle",
+    "humor": "Humor"
+  },
+
+  "prompts": {
+    "pool": {
+      "perfectSaturday": "My perfect Saturday...",
+      "firstDate": "On a first date I'd take you to...",
+      "passionAbout": "I'm passionate about...",
+      "lastLaughed": "The last thing that made me laugh...",
+      "agentShouldKnow": "My agent should know...",
+      "sundayMornings": "Sunday mornings I usually...",
+      "confess": "I'll confess...",
+      "biggestQuality": "The quality I value most..."
+    },
+    "ui": {
+      "title": "Tell about yourself 💜",
+      "subtitle": "Pick 3 prompts and write a short answer",
+      "selectMore": "Pick {{count}} more",
+      "ready": "Perfect, let's continue!",
+      "answerPlaceholder": "Type your answer...",
+      "selected": "Selected"
+    }
+  },
+
+  "profileDetail": {
+    "compatibilityTitle": "Compatibility analysis",
+    "agentSays": "🤖 Your agent says",
+    "promptsTitle": "About",
+    "infoTitle": "Details",
+    "sendMessage": "Send message 💬",
+    "pass": "Pass",
+    "kmAway": "{{km}} km away",
+    "back": "Back"
+  },
+
+  "matchReveal": {
+    "title": "IT'S A MATCH!",
+    "subtitle": "Your agents matched ✨",
+    "compatibilityScore": "{{score}} match",
+    "sayHi": "Say hi 💬",
+    "viewProfile": "View profile",
+    "notNow": "Not now"
+  },
+
+  "swipe": {
+    "like": "LIKE",
+    "pass": "PASS",
+    "details": "DETAILS",
+    "empty": "You've seen all your matches 🎉",
+    "emptySub": "Your agent keeps working — new matches coming"
+  },
+
   "common": {
     "error": "Error",
     "retry": "Try again",
