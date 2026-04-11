@@ -122,20 +122,21 @@ const lightColors: ThemeColors = {
 };
 
 const darkColors: ThemeColors = {
-  bgGradient: ['#0F0A1A', '#151025', '#0A0F1A'],
-  authGradient: ['#1A0F15', '#1A1025', '#150F1A', '#0F151A'],
-  card: '#1E1A2E',
-  inputBg: '#251E3A',
-  loadingBg: '#0F0A1A',
+  // Deep Midnight palette - sofistike koyu lacivert/siyah
+  bgGradient: ['#05060F', '#0A0B1A', '#06070F'],
+  authGradient: ['#05060F', '#0D0718', '#0A0B1A', '#05060F'],
+  card: 'rgba(28, 22, 45, 0.6)',      // Yarı şeffaf cam efekti için
+  inputBg: 'rgba(36, 28, 56, 0.55)',
+  loadingBg: '#05060F',
 
-  textPrimary: '#F0E8FF',
-  textSecondary: '#8B7AA0',
-  textMuted: '#7A6B92',
-  textHint: '#6B5A80',
-  placeholder: '#6B5A80',
+  textPrimary: '#F5F0FF',
+  textSecondary: 'rgba(245, 240, 255, 0.65)',  // 65% opacity - apple HIG
+  textMuted: 'rgba(245, 240, 255, 0.5)',
+  textHint: 'rgba(245, 240, 255, 0.4)',
+  placeholder: 'rgba(245, 240, 255, 0.35)',
 
-  border: '#3A2E55',
-  borderLight: '#2E2445',
+  border: 'rgba(192, 132, 252, 0.15)',  // İnce mor glow
+  borderLight: 'rgba(192, 132, 252, 0.08)',
 
   accentPink: '#FF6B9D',
   accentPurple: '#C084FC',
@@ -153,12 +154,12 @@ const darkColors: ThemeColors = {
   error: '#FF6B9D',
   online: '#10B981',
 
-  shadow: '#000000',
+  shadow: '#C084FC',  // Glow shadow - koyu arka planda görünmez olmasın
 
-  overlayDark: 'rgba(15,10,26,0.9)',
-  overlayLight: 'rgba(30,26,46,0.85)',
+  overlayDark: 'rgba(5,6,15,0.92)',
+  overlayLight: 'rgba(28,22,45,0.75)',
 
-  disabledGradient: ['#3A2E55', '#2E2445'],
+  disabledGradient: ['rgba(58,46,85,0.5)', 'rgba(46,36,69,0.5)'],
 
   photoPlaceholders: [
     { bg: '#3A1A2A', text: '#FF6B9D' },
@@ -170,12 +171,12 @@ const darkColors: ThemeColors = {
 
   agentBGradient: ['#818CF8', '#3B82F6'],
 
-  chevron: '#4A3E65',
+  chevron: 'rgba(245,240,255,0.25)',
   badge: 'rgba(0,0,0,0.7)',
-  tabInactive: '#6B5A80',
+  tabInactive: 'rgba(245,240,255,0.4)',
   white: '#ffffff',
   black: '#000000',
-  separator: '#2E2445',
+  separator: 'rgba(192,132,252,0.1)',
 };
 
 interface ThemeContextType {

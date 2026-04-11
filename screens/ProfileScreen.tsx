@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  ScrollView, Image, ActivityIndicator, Alert, Linking, Platform, Switch,
+  ScrollView, Image, ActivityIndicator, Alert, Linking, Platform, Switch, Animated, Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -44,6 +44,14 @@ export default function ProfileScreen({ navigation }: any) {
   const [deleting, setDeleting] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const iapListenersRef = useRef<{ update?: any; error?: any }>({});
+  const premiumBtnScale = useRef(new Animated.Value(1)).current;
+
+  const onPremiumPressIn = () => {
+    Animated.spring(premiumBtnScale, { toValue: 0.94, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
+  };
+  const onPremiumPressOut = () => {
+    Animated.spring(premiumBtnScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 8 }).start();
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -375,17 +383,20 @@ export default function ProfileScreen({ navigation }: any) {
                 <>
                   <Text style={s.premiumPrice}>{t('profile.premiumPrice')}</Text>
                   <Text style={s.premiumDuration}>{t('profile.premiumDuration')}</Text>
-                  <TouchableOpacity
-                    style={s.premiumBuyBtn}
-                    onPress={handlePurchase}
-                    disabled={purchasing}
-                    activeOpacity={0.85}
-                  >
-                    {purchasing
-                      ? <ActivityIndicator color="#C084FC" size="small" />
-                      : <Text style={s.premiumBuyTxt}>{t('profile.premiumSubscribe')}</Text>
-                    }
-                  </TouchableOpacity>
+                  <Animated.View style={{ transform: [{ scale: premiumBtnScale }], width: '100%', alignItems: 'center' }}>
+                    <Pressable
+                      style={s.premiumBuyBtn}
+                      onPress={handlePurchase}
+                      onPressIn={onPremiumPressIn}
+                      onPressOut={onPremiumPressOut}
+                      disabled={purchasing}
+                    >
+                      {purchasing
+                        ? <ActivityIndicator color="#C084FC" size="small" />
+                        : <Text style={s.premiumBuyTxt}>{t('profile.premiumSubscribe')}</Text>
+                      }
+                    </Pressable>
+                  </Animated.View>
                 </>
               )}
               <Text style={s.premiumLegal}>
@@ -506,16 +517,23 @@ const s = StyleSheet.create({
   avatarAddIcon: { color: '#fff', fontSize: 22, fontWeight: '400', lineHeight: 24 },
   avatarName: { fontSize: 28, fontWeight: '800', color: '#2D1B4E', marginTop: 4 },
   avatarSub: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
-  premiumCard: { borderRadius: 22, overflow: 'hidden' },
-  premiumGrad: { alignItems: 'center', padding: 24, borderRadius: 22 },
+  premiumCard: {
+    borderRadius: 32, overflow: 'hidden',
+    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 14,
+  },
+  premiumGrad: { alignItems: 'center', padding: 32, borderRadius: 32 },
   premiumIcon: { fontSize: 36, marginBottom: 8 },
-  premiumTitle: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  premiumDesc: { fontSize: 14, color: 'rgba(255,255,255,0.85)', fontWeight: '600', marginBottom: 12 },
-  premiumPrice: { fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 2 },
-  premiumDuration: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 16 },
-  premiumBuyBtn: { backgroundColor: '#fff', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 48, marginBottom: 14 },
-  premiumBuyTxt: { fontSize: 16, fontWeight: '800', color: '#C084FC' },
-  premiumLegal: { fontSize: 11, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 16, marginBottom: 10, paddingHorizontal: 8 },
+  premiumTitle: { fontSize: 26, fontWeight: '900', color: '#fff', marginBottom: 6, letterSpacing: -0.5 },
+  premiumDesc: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
+  premiumPrice: { fontSize: 36, fontWeight: '900', color: '#fff', marginBottom: 4, letterSpacing: -1 },
+  premiumDuration: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '500', marginBottom: 8 },
+  premiumBuyBtn: {
+    backgroundColor: '#fff', borderRadius: 28, paddingVertical: 18, paddingHorizontal: 56, marginBottom: 18, marginTop: 4,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8,
+  },
+  premiumBuyTxt: { fontSize: 16, fontWeight: '800', color: '#C084FC', letterSpacing: 0.3 },
+  premiumLegal: { fontSize: 11, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 16, marginBottom: 12, paddingHorizontal: 8 },
   premiumLinks: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   premiumLink: { fontSize: 12, color: '#fff', fontWeight: '700', textDecorationLine: 'underline' },
   premiumLinkSep: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },

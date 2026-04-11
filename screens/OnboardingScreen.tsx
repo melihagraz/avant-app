@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { buildAgentSystemPrompt } from '../lib/agentPrompt';
@@ -70,19 +71,8 @@ export default function OnboardingScreen({ navigation }: any) {
       ],
     },
     {
-      id: 'city', key: 'city', type: 'chips' as QuestionType,
+      id: 'city', key: 'city', type: 'text' as QuestionType,
       text: t('onboarding.qCity'),
-      chips: [
-        { label: t('cities.istanbul'), value: 'Istanbul' },
-        { label: t('cities.ankara'), value: 'Ankara' },
-        { label: t('cities.izmir'), value: 'Izmir' },
-        { label: t('cities.antalya'), value: 'Antalya' },
-        { label: t('cities.trabzon'), value: 'Trabzon' },
-        { label: t('cities.samsun'), value: 'Samsun' },
-        { label: t('cities.gaziantep'), value: 'Gaziantep' },
-        { label: t('cities.van'), value: 'Van' },
-        { label: t('cities.other'), value: 'other' },
-      ],
       placeholder: t('onboarding.placeholderCity'),
     },
     {
@@ -193,7 +183,6 @@ export default function OnboardingScreen({ navigation }: any) {
     {
       id: 'photo', key: 'photo', type: 'photo' as QuestionType,
       text: (a: Record<string, string>) => t('onboarding.qPhoto', { name: a.name }),
-      optional: true,
     },
   ], [t]);
 
@@ -204,7 +193,7 @@ export default function OnboardingScreen({ navigation }: any) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showCityInput, setShowCityInput] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
@@ -224,9 +213,8 @@ export default function OnboardingScreen({ navigation }: any) {
   const currentQ = QUESTIONS[step];
   const isChip = currentQ.type === 'chips' || currentQ.type === 'chips_multi';
   const isMulti = currentQ.type === 'chips_multi';
-  const isCityStep = currentQ.id === 'city';
   const isPhotoStep = currentQ.type === 'photo';
-  const showTextInput = (!isChip && !isPhotoStep) || (isCityStep && showCityInput);
+  const showTextInput = !isChip && !isPhotoStep;
 
   const onChipPress = (chip: Chip) => {
     if (busy) return;
@@ -234,12 +222,6 @@ export default function OnboardingScreen({ navigation }: any) {
       setSelectedChips(prev =>
         prev.includes(chip.value) ? prev.filter(v => v !== chip.value) : [...prev, chip.value]
       );
-      return;
-    }
-    if (isCityStep && chip.value === 'other') {
-      setSelectedChips(['other']);
-      setShowCityInput(true);
-      setTimeout(() => inputRef.current?.focus(), 100);
       return;
     }
     setSelectedChips([chip.value]);
@@ -292,6 +274,60 @@ export default function OnboardingScreen({ navigation }: any) {
     advance(t('onboarding.skipped'), '');
   };
 
+  const goBack = () => {
+    if (busy || step === 0) return;
+    const prevStep = step - 1;
+    const prevQ = QUESTIONS[prevStep];
+
+    // Son soru-cevap çiftini mesajlardan kaldır
+    // messages yapısı: [...eskiler, userAnswer, currentAgentQuestion]
+    // Son 2 mesajı kaldırıp önceki soruyu tekrar göster
+    setMessages(prev => {
+      const trimmed = prev.slice(0, -2);
+      return [...trimmed, { role: 'agent', text: getQText(prevQ, answers), questionIndex: prevStep }];
+    });
+
+    // Önceki cevabı answers'dan temizle
+    const newAnswers = { ...answers };
+    delete newAnswers[prevQ.key];
+    setAnswers(newAnswers);
+
+    setInput('');
+    setSelectedChips([]);
+    setStep(prevStep);
+    trackEvent('onboarding_back', { from: step, to: prevStep });
+  };
+
+  const detectCity = async () => {
+    if (detectingLocation) return;
+    setDetectingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(t('common.permissionNeeded'), t('onboarding.locationDenied'));
+        setDetectingLocation(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      const places = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+      const city = places[0]?.city || places[0]?.subregion || places[0]?.region || '';
+      if (city) {
+        trackEvent('location_detected');
+        advance(city, city);
+      } else {
+        Alert.alert(t('common.error'), t('onboarding.locationError'));
+      }
+    } catch (err) {
+      captureError(err, { context: 'detect_city' });
+      Alert.alert(t('common.error'), t('onboarding.locationError'));
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
@@ -319,7 +355,6 @@ export default function OnboardingScreen({ navigation }: any) {
     trackEvent('onboarding_step', { step: step + 1, question: currentQ.id });
     setInput('');
     setSelectedChips([]);
-    setShowCityInput(false);
 
     if (userLabel !== t('onboarding.skipped')) {
       setMessages(prev => [...prev, { role: 'user', text: userLabel }]);
@@ -441,7 +476,13 @@ export default function OnboardingScreen({ navigation }: any) {
       <SafeAreaView style={s.safeArea}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.header}>
-            <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.accent, { color: colors.accentPink }]}>a</Text>nt</Text>
+            {step > 0 ? (
+              <TouchableOpacity onPress={goBack} style={s.backBtn} disabled={busy}>
+                <Text style={[s.backBtnTxt, { color: colors.textSecondary }]}>‹</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.accent, { color: colors.accentPink }]}>a</Text>nt</Text>
+            )}
             <View style={[s.progBar, { backgroundColor: colors.border }]}>
               <LinearGradient
                 colors={colors.accentGradient as any}
@@ -461,6 +502,7 @@ export default function OnboardingScreen({ navigation }: any) {
               const showChips = isAgent && msgQ && isChipQ(msgQ) && isLastMsg && !busy;
               const showOptional = isAgent && msgQ?.optional && msgQ.type !== 'photo' && isLastMsg && !busy;
               const showPhoto = isAgent && msgQ?.type === 'photo' && isLastMsg && !busy;
+              const showLocationBtn = isAgent && msgQ?.id === 'city' && isLastMsg && !busy;
 
               return (
                 <View key={i}>
@@ -512,18 +554,6 @@ export default function OnboardingScreen({ navigation }: any) {
                           </LinearGradient>
                         </TouchableOpacity>
                       )}
-                      {isCityStep && showCityInput && (
-                        <TextInput
-                          ref={inputRef}
-                          style={[s.input, { marginTop: 4, flex: undefined, width: '100%', backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }]}
-                          value={input}
-                          onChangeText={setInput}
-                          placeholder={t('onboarding.placeholderCity')}
-                          placeholderTextColor={colors.placeholder}
-                          returnKeyType="send"
-                          onSubmitEditing={sendText}
-                        />
-                      )}
                     </View>
                   )}
 
@@ -549,9 +579,6 @@ export default function OnboardingScreen({ navigation }: any) {
                             </LinearGradient>
                           </TouchableOpacity>
                         )}
-                        <TouchableOpacity style={s.skipPhotoBtn} onPress={skipOptional}>
-                          <Text style={[s.skipPhotoBtnTxt, { color: colors.placeholder }]}>{t('onboarding.skipPhoto')}</Text>
-                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
@@ -559,6 +586,20 @@ export default function OnboardingScreen({ navigation }: any) {
                   {showOptional && (
                     <TouchableOpacity style={s.skipBtn} onPress={skipOptional}>
                       <Text style={[s.skipTxt, { color: colors.placeholder }]}>{t('common.skip')} →</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {showLocationBtn && (
+                    <TouchableOpacity
+                      style={[s.locationBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      onPress={detectCity}
+                      disabled={detectingLocation}
+                    >
+                      {detectingLocation ? (
+                        <ActivityIndicator size="small" color={colors.accentPurple} />
+                      ) : (
+                        <Text style={[s.locationBtnTxt, { color: colors.userBubble }]}>{t('onboarding.useLocation')}</Text>
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -575,7 +616,7 @@ export default function OnboardingScreen({ navigation }: any) {
             )}
           </ScrollView>
 
-          {showTextInput && !isCityStep && (
+          {showTextInput && (
             <View style={[s.inputRow, { backgroundColor: colors.card, borderTopColor: colors.separator }]}>
               <TextInput
                 ref={inputRef}
@@ -618,6 +659,8 @@ const s = StyleSheet.create({
   bg: { flex: 1 },
   safeArea: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingVertical: 14 },
+  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  backBtnTxt: { fontSize: 32, fontWeight: '300', lineHeight: 34 },
   logo: { fontSize: 22, fontWeight: '800', color: '#2D1B4E', letterSpacing: -0.5 },
   accent: { color: '#FF6B9D' },
   progBar: { flex: 1, height: 6, backgroundColor: '#F0EBF7', borderRadius: 3, overflow: 'hidden' },
@@ -647,6 +690,8 @@ const s = StyleSheet.create({
   devamTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
   skipBtn: { marginLeft: 42, marginTop: 10, paddingVertical: 8 },
   skipTxt: { fontSize: 14, color: '#C4B5D0', fontWeight: '600' },
+  locationBtn: { marginLeft: 42, marginTop: 10, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 22, borderWidth: 2, alignSelf: 'flex-start', minWidth: 170, alignItems: 'center' },
+  locationBtnTxt: { fontSize: 15, fontWeight: '700' },
   photoStep: { marginLeft: 42, marginTop: 14, gap: 14 },
   photoPreviewWrap: { position: 'relative', alignSelf: 'flex-start' },
   photoPreview: { width: 130, height: 170, borderRadius: 22, backgroundColor: '#F8F5FC' },

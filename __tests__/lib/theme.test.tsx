@@ -29,8 +29,8 @@ describe('useTheme', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
 
     expect(result.current.isDark).toBe(true);
-    expect(result.current.colors.card).toBe('#1E1A2E');
-    expect(result.current.colors.textPrimary).toBe('#F0E8FF');
+    expect(result.current.colors.card).toBe('rgba(28, 22, 45, 0.6)');
+    expect(result.current.colors.textPrimary).toBe('#F5F0FF');
   });
 
   it('should keep accent colors the same in both themes', () => {
