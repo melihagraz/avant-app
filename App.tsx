@@ -25,6 +25,8 @@ import AgentLogScreen from './screens/AgentLogScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ProfileDetailScreen from './screens/ProfileDetailScreen';
 import MatchRevealScreen from './screens/MatchRevealScreen';
+import DiscoverScreen from './screens/DiscoverScreen';
+import AgentMatchesScreen from './screens/AgentMatchesScreen';
 
 // Sentry'yi uygulama yüklenmeden önce başlat
 initSentry();
@@ -155,7 +157,7 @@ function AppContent() {
     );
   }
 
-  const initialRoute = !session ? 'Auth' : hasAgent ? 'Home' : 'Welcome';
+  const initialRoute = !session ? 'Auth' : hasAgent ? 'Discover' : 'Welcome';
 
   return (
     <View style={{ flex: 1 }}>
@@ -184,6 +186,8 @@ function AppContent() {
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        <Stack.Screen name="Discover" component={DiscoverScreen} />
+        <Stack.Screen name="AgentMatches" component={AgentMatchesScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="HumanChat" component={HumanChatScreen} />
         <Stack.Screen name="AgentLog" component={AgentLogScreen} />

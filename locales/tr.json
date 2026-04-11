@@ -64,6 +64,26 @@
     "emptySub": "Agentın çalışmaya devam ediyor, yeni eşleşmeler yakında"
   },
 
+  "discover": {
+    "title": "Keşfet",
+    "agentBannerActive": "Agentın aktif, çalışıyor...",
+    "agentBannerFound": "Agentın {{count}} kişi buldu ✨",
+    "emptyTitle": "Şu an hepsi bu kadar 🎉",
+    "emptySub": "Yeni kullanıcılar yakında, yarın tekrar gel",
+    "like": "Beğen",
+    "pass": "Geç",
+    "superLike": "Super Like ✨",
+    "limitReached": "Günlük beğeni hakkın bitti",
+    "limitReachedSub": "Yarın yeni beğeniler kazanacaksın — ya da premium'a geç"
+  },
+
+  "superLike": {
+    "title": "Super Like",
+    "subtitle": "Özel bir şey söyle, dikkatini çek",
+    "commentPlaceholder": "Dikkatini çeken şeyi yaz...",
+    "submit": "Gönder ✨"
+  },
+
   "common": {
     "error": "Hata",
     "retry": "Tekrar dene",

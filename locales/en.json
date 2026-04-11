@@ -64,6 +64,26 @@
     "emptySub": "Your agent keeps working — new matches coming"
   },
 
+  "discover": {
+    "title": "Discover",
+    "agentBannerActive": "Your agent is working...",
+    "agentBannerFound": "Your agent found {{count}} people ✨",
+    "emptyTitle": "That's everyone for now 🎉",
+    "emptySub": "New people coming soon, check back tomorrow",
+    "like": "Like",
+    "pass": "Pass",
+    "superLike": "Super Like ✨",
+    "limitReached": "Daily like limit reached",
+    "limitReachedSub": "You'll get fresh likes tomorrow — or upgrade to premium"
+  },
+
+  "superLike": {
+    "title": "Super Like",
+    "subtitle": "Say something special to stand out",
+    "commentPlaceholder": "Write what caught your eye...",
+    "submit": "Send ✨"
+  },
+
   "common": {
     "error": "Error",
     "retry": "Try again",
