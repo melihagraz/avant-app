@@ -5,6 +5,7 @@ import {
   ScrollView, Image, ActivityIndicator, Alert, Linking, Platform, Switch, Animated, Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {
   initConnection, getSubscriptions, requestSubscription,
@@ -337,17 +338,19 @@ export default function ProfileScreen({ navigation }: any) {
   return (
     <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
       <SafeAreaView style={s.safeArea}>
+        {/* Menu header: back + title + sign out */}
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Text style={[s.back, { color: colors.textSecondary }]}>‹</Text>
           </TouchableOpacity>
-          <Text style={[s.title, { color: colors.textPrimary }]}>{t('profile.title')}</Text>
+          <Text style={[s.title, { color: colors.textPrimary }]}>Menu</Text>
           <TouchableOpacity onPress={signOut} style={s.signOutBtn}>
             <Text style={[s.signOut, { color: colors.accentPink }]}>{t('profile.signOut')}</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={s.scroll}>
+          {/* Centered avatar + verified + view profile */}
           <View style={s.avatarSection}>
             <TouchableOpacity style={s.avatarWrap} onPress={pickImage} disabled={uploading}>
               <LinearGradient colors={colors.accentGradient as any} style={s.avatarRing}>
@@ -355,63 +358,113 @@ export default function ProfileScreen({ navigation }: any) {
                   <Image source={{ uri: profile.photos[0] }} style={s.avatarImg} />
                 ) : (
                   <View style={[s.avatarPlaceholder, { backgroundColor: colors.card }]}>
-                    <Text style={[s.avatarInitial, { color: colors.accentPink }]}>{profile.name?.[0]?.toUpperCase() || 'M'}</Text>
+                    <Text style={[s.avatarInitial, { color: colors.accentPink }]}>
+                      {profile.name?.[0]?.toUpperCase() || 'M'}
+                    </Text>
                   </View>
                 )}
               </LinearGradient>
-              <View style={[s.avatarAddBtn, { backgroundColor: colors.userBubble, borderColor: colors.inputBg }]}>
-                {uploading
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={s.avatarAddIcon}>+</Text>
-                }
-              </View>
+              {uploading && (
+                <View style={s.avatarUploading}>
+                  <ActivityIndicator color="#fff" size="small" />
+                </View>
+              )}
             </TouchableOpacity>
-            <Text style={[s.avatarName, { color: colors.textPrimary }]}>{profile.name}</Text>
-            <Text style={[s.avatarSub, { color: colors.textSecondary }]}>{profile.city} · {profile.age}</Text>
+
+            <View style={s.nameRow}>
+              <Text style={[s.avatarName, { color: colors.textPrimary }]}>{profile.name}</Text>
+              <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />
+            </View>
+
+            <TouchableOpacity onPress={pickImage}>
+              <Text style={[s.viewProfileLink, { color: colors.textSecondary }]}>
+                View profile
+              </Text>
+            </TouchableOpacity>
+
+            {profile.is_premium && (
+              <View style={s.premiumActivePill}>
+                <Ionicons name="star" size={12} color="#fff" />
+                <Text style={s.premiumActiveText}>{t('profile.premiumActive')}</Text>
+              </View>
+            )}
           </View>
 
-          <View style={s.premiumCard}>
-            <LinearGradient colors={colors.accentGradient as any} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.premiumGrad}>
-              <Text style={s.premiumIcon}>⚡</Text>
-              <Text style={s.premiumTitle}>{t('profile.premiumTitle')}</Text>
-              <Text style={s.premiumDesc}>{t('profile.premiumDesc')}</Text>
-              {profile.is_premium ? (
-                <View style={s.premiumBuyBtn}>
-                  <Text style={[s.premiumBuyTxt, { color: '#10B981' }]}>{t('profile.premiumActive')}</Text>
+          {/* Gold Premium Card (Muzz-style) */}
+          {!profile.is_premium && (
+            <View style={s.goldCard}>
+              <LinearGradient
+                colors={['#F5E7B3', '#E5C84F', '#B8860B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.goldGrad}
+              >
+                <View style={s.goldTopRow}>
+                  <View style={s.goldDashes}>
+                    <View style={s.goldDash} />
+                    <View style={[s.goldDash, { backgroundColor: '#8B6914' }]} />
+                    <View style={s.goldDash} />
+                    <View style={s.goldDash} />
+                  </View>
+                  <Ionicons name="chatbubble-ellipses-outline" size={40} color="#8B6914" style={{ opacity: 0.6 }} />
                 </View>
-              ) : (
-                <>
-                  <Text style={s.premiumPrice}>{t('profile.premiumPrice')}</Text>
-                  <Text style={s.premiumDuration}>{t('profile.premiumDuration')}</Text>
-                  <Animated.View style={{ transform: [{ scale: premiumBtnScale }], width: '100%', alignItems: 'center' }}>
-                    <Pressable
-                      style={s.premiumBuyBtn}
-                      onPress={handlePurchase}
-                      onPressIn={onPremiumPressIn}
-                      onPressOut={onPremiumPressOut}
-                      disabled={purchasing}
+
+                <Text style={s.goldTitle}>{t('profile.premiumTitle')}</Text>
+                <Text style={s.goldDesc}>{t('profile.premiumDesc')}</Text>
+
+                <Animated.View style={{ transform: [{ scale: premiumBtnScale }], width: '100%', alignItems: 'center', marginTop: 14 }}>
+                  <Pressable
+                    style={s.goldCtaBtn}
+                    onPress={handlePurchase}
+                    onPressIn={onPremiumPressIn}
+                    onPressOut={onPremiumPressOut}
+                    disabled={purchasing}
+                  >
+                    <LinearGradient
+                      colors={['#B8860B', '#8B6914']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={s.goldCtaGrad}
                     >
-                      {purchasing
-                        ? <ActivityIndicator color="#C084FC" size="small" />
-                        : <Text style={s.premiumBuyTxt}>{t('profile.premiumSubscribe')}</Text>
-                      }
-                    </Pressable>
-                  </Animated.View>
-                </>
-              )}
-              <Text style={s.premiumLegal}>
-                {t('profile.premiumLegal')}
-              </Text>
-              <View style={s.premiumLinks}>
-                <Text style={s.premiumLink} onPress={() => Linking.openURL('https://melihagraz.github.io/avant-app')}>
-                  {t('profile.privacyPolicy')}
+                      {purchasing ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <>
+                          <Text style={s.goldCtaText}>{t('profile.premiumSubscribe')}</Text>
+                          <Ionicons name="star" size={16} color="#fff" />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </Pressable>
+                </Animated.View>
+
+                <Text style={s.goldPrice}>{t('profile.premiumPrice')}</Text>
+                <Text style={s.goldLegal} numberOfLines={3}>
+                  {t('profile.premiumLegal')}
                 </Text>
-                <Text style={s.premiumLinkSep}>·</Text>
-                <Text style={s.premiumLink} onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
-                  {t('profile.termsOfService')}
-                </Text>
-              </View>
-            </LinearGradient>
+                <View style={s.premiumLinks}>
+                  <Text style={[s.premiumLink, { color: '#8B6914' }]} onPress={() => Linking.openURL('https://melihagraz.github.io/avant-app')}>
+                    {t('profile.privacyPolicy')}
+                  </Text>
+                  <Text style={[s.premiumLinkSep, { color: '#8B6914' }]}>·</Text>
+                  <Text style={[s.premiumLink, { color: '#8B6914' }]} onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
+                    {t('profile.termsOfService')}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </View>
+          )}
+
+          {/* Stats cards row */}
+          <View style={s.statsRow}>
+            <View style={[s.statCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+              <Text style={[s.statNumber, { color: colors.textPrimary }]}>15</Text>
+              <Text style={[s.statLabel, { color: colors.textSecondary }]}>Daily likes</Text>
+            </View>
+            <View style={[s.statCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+              <Text style={[s.statNumber, { color: colors.textPrimary }]}>1</Text>
+              <Text style={[s.statLabel, { color: colors.textSecondary }]}>Super likes</Text>
+            </View>
           </View>
 
           {(profile.photos?.length || 0) > 0 && (
@@ -517,6 +570,154 @@ const s = StyleSheet.create({
   avatarAddIcon: { color: '#fff', fontSize: 22, fontWeight: '400', lineHeight: 24 },
   avatarName: { fontSize: 28, fontWeight: '800', color: '#2D1B4E', marginTop: 4 },
   avatarSub: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
+  // Menu redesign styles
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  viewProfileLink: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 4,
+    textDecorationLine: 'underline',
+  },
+  avatarUploading: {
+    position: 'absolute',
+    inset: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 64,
+  },
+  premiumActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    marginTop: 10,
+  },
+  premiumActiveText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+
+  // Gold card (Muzz-style premium)
+  goldCard: {
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#B8860B',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 28,
+    elevation: 12,
+    marginBottom: 4,
+  },
+  goldGrad: {
+    padding: 28,
+    borderRadius: 28,
+    alignItems: 'center',
+  },
+  goldTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 12,
+  },
+  goldDashes: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  goldDash: {
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(139,105,20,0.4)',
+  },
+  goldTitle: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#5C4408',
+    letterSpacing: -0.5,
+    textAlign: 'center',
+  },
+  goldDesc: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(92,68,8,0.75)',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  goldCtaBtn: {
+    borderRadius: 32,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  goldCtaGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 18,
+    borderRadius: 32,
+  },
+  goldCtaText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  goldPrice: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#5C4408',
+    marginTop: 12,
+    letterSpacing: -0.8,
+  },
+  goldLegal: {
+    fontSize: 10,
+    color: 'rgba(92,68,8,0.65)',
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+
+  // Stats cards
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 22,
+    padding: 20,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  statNumber: {
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: -1,
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+
   premiumCard: {
     borderRadius: 32, overflow: 'hidden',
     shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 14,

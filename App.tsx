@@ -27,6 +27,7 @@ import ProfileDetailScreen from './screens/ProfileDetailScreen';
 import MatchRevealScreen from './screens/MatchRevealScreen';
 import DiscoverScreen from './screens/DiscoverScreen';
 import AgentMatchesScreen from './screens/AgentMatchesScreen';
+import ExploreScreen from './screens/ExploreScreen';
 
 // Sentry'yi uygulama yüklenmeden önce başlat
 initSentry();
@@ -187,6 +188,7 @@ function AppContent() {
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="Discover" component={DiscoverScreen} />
+        <Stack.Screen name="Explore" component={ExploreScreen} />
         <Stack.Screen name="AgentMatches" component={AgentMatchesScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="HumanChat" component={HumanChatScreen} />

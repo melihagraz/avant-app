@@ -1,5 +1,5 @@
 // screens/DiscoverScreen.tsx
-// Main Hinge-style discover feed. SwipeDeck of profiles + AgentBanner at top.
+// Full-screen Muzz-style discover feed with top bar, swipe deck, circular actions, 4-tab bar.
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert,
@@ -14,7 +14,6 @@ import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import SwipeDeck from '../components/SwipeDeck';
 import DiscoverProfileCard, { DiscoverProfile } from '../components/DiscoverProfileCard';
-import AgentBanner from '../components/AgentBanner';
 import SuperLikeModal from '../components/SuperLikeModal';
 
 const FREE_LIKES_PER_DAY = 15;
@@ -28,13 +27,14 @@ export default function DiscoverScreen({ navigation }: any) {
   const [error, setError] = useState(false);
   const [remainingLikes, setRemainingLikes] = useState(FREE_LIKES_PER_DAY);
   const [remainingSuperLikes, setRemainingSuperLikes] = useState(1);
+  const [boostCredits, setBoostCredits] = useState(1);
   const [agentMatchCount, setAgentMatchCount] = useState(0);
 
   const [superLikeProfile, setSuperLikeProfile] = useState<DiscoverProfile | null>(null);
   const [showSuperLikeModal, setShowSuperLikeModal] = useState(false);
 
   const myUserIdRef = useRef<string>('');
-  const myNameRef = useRef<string>('');
+  const swipeRef = useRef<{ index: number }>({ index: 0 });
 
   useEffect(() => {
     init();
@@ -50,14 +50,6 @@ export default function DiscoverScreen({ navigation }: any) {
         return;
       }
       myUserIdRef.current = user.id;
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', user.id)
-        .single();
-      if (userData) myNameRef.current = userData.name?.[0]?.toUpperCase() || 'M';
-
       await Promise.all([fetchFeed(), fetchAgentMatchCount(user.id)]);
     } catch (err) {
       captureError(err, { context: 'discover_init' });
@@ -73,7 +65,6 @@ export default function DiscoverScreen({ navigation }: any) {
         body: {},
       });
       if (error || !data) {
-        captureError(error || new Error('no data'), { context: 'fetch_discover_feed' });
         setProfiles([]);
         return;
       }
@@ -86,7 +77,6 @@ export default function DiscoverScreen({ navigation }: any) {
 
   const fetchAgentMatchCount = async (userId: string) => {
     try {
-      // Count agent matches that haven't been chatted yet
       const { data: agentMatches } = await supabase
         .from('matches')
         .select('id')
@@ -116,12 +106,7 @@ export default function DiscoverScreen({ navigation }: any) {
   ) => {
     try {
       const { data, error } = await supabase.functions.invoke('process-like', {
-        body: {
-          liked_id: likedId,
-          action,
-          comment,
-          target_prompt_key: targetPromptKey || null,
-        },
+        body: { liked_id: likedId, action, comment, target_prompt_key: targetPromptKey || null },
       });
 
       if (error) {
@@ -129,24 +114,18 @@ export default function DiscoverScreen({ navigation }: any) {
         return;
       }
       if (!data || data.ok === false) {
-        if (data?.error === 'daily_like_limit_reached') {
-          trackEvent('discover_limit_reached', { type: 'like' });
-          Alert.alert(t('discover.limitReached'), t('discover.limitReachedSub'));
-        } else if (data?.error === 'daily_super_like_limit_reached') {
-          trackEvent('discover_limit_reached', { type: 'super_like' });
+        if (data?.error === 'daily_like_limit_reached' || data?.error === 'daily_super_like_limit_reached') {
+          trackEvent('discover_limit_reached', { type: action });
           Alert.alert(t('discover.limitReached'), t('discover.limitReachedSub'));
         }
         return;
       }
 
-      // Update counters
       if (typeof data.remaining_likes === 'number') setRemainingLikes(data.remaining_likes);
       if (typeof data.remaining_super_likes === 'number') setRemainingSuperLikes(data.remaining_super_likes);
 
-      // Mutual match → reveal modal
       if (data.matched && data.match_id) {
         trackEvent('discover_match_created', { match_id: data.match_id, action });
-        // Build a synthetic match object for MatchReveal
         const profile = profiles.find((p) => p.id === likedId);
         if (profile) {
           navigation.navigate('MatchReveal', {
@@ -170,12 +149,10 @@ export default function DiscoverScreen({ navigation }: any) {
     trackEvent('discover_swipe_left', { liked_id: profile.id });
     callProcessLike(profile.id, 'pass');
   };
-
   const handleSwipeRight = (profile: DiscoverProfile) => {
     trackEvent('discover_swipe_right', { liked_id: profile.id });
     callProcessLike(profile.id, 'like');
   };
-
   const handleSwipeUp = (profile: DiscoverProfile) => {
     trackEvent('discover_swipe_up', { liked_id: profile.id });
     navigation.navigate('ProfileDetail', { userId: profile.id, matchId: '' });
@@ -183,8 +160,7 @@ export default function DiscoverScreen({ navigation }: any) {
 
   const openSuperLike = () => {
     if (profiles.length === 0) return;
-    const current = profiles[0];
-    setSuperLikeProfile(current);
+    setSuperLikeProfile(profiles[0]);
     setShowSuperLikeModal(true);
   };
 
@@ -194,53 +170,44 @@ export default function DiscoverScreen({ navigation }: any) {
     callProcessLike(superLikeProfile.id, 'super_like', comment, targetPromptKey);
     setShowSuperLikeModal(false);
     setSuperLikeProfile(null);
-    // Remove the profile from the deck
     setProfiles((prev) => prev.filter((p) => p.id !== superLikeProfile.id));
   };
 
   return (
-    <LinearGradient colors={colors.bgGradient as any} style={s.container}>
+    <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
       <SafeAreaView style={s.safeArea}>
-        {/* Header */}
-        <View style={s.header}>
-          <Text style={[s.logo, { color: colors.textPrimary }]}>
-            av<Text style={{ color: colors.accentPink }}>a</Text>nt
-          </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={s.avatarBtn}>
-            <LinearGradient colors={colors.accentGradientAlt as any} style={s.avatarGrad}>
-              <Text style={s.avatarTxt}>{myNameRef.current || 'M'}</Text>
-            </LinearGradient>
+        {/* TOP BAR */}
+        <View style={s.topBar}>
+          <TouchableOpacity style={[s.iconBtn, { borderColor: colors.border }]}>
+            <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
+
+          <TouchableOpacity style={[s.sortBtn, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <Ionicons name="swap-vertical" size={16} color={colors.textPrimary} />
+            <Text style={[s.sortText, { color: colors.textPrimary }]}>Sort</Text>
+          </TouchableOpacity>
+
+          <View style={s.topRight}>
+            <TouchableOpacity style={s.boostPill} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#0F766E', '#0D9488']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.boostGrad}
+              >
+                <Text style={s.boostNumber}>{boostCredits}</Text>
+                <Ionicons name="rocket" size={14} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[s.iconBtn, { borderColor: colors.border }]}>
+              <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
+              {agentMatchCount > 0 && <View style={s.notifDot} />}
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Agent Banner */}
-        <AgentBanner
-          agentMatchCount={agentMatchCount}
-          onPress={() => {
-            trackEvent('discover_agent_banner_tap');
-            navigation.navigate('AgentMatches');
-          }}
-        />
-
-        {/* Like counter */}
-        {!loading && profiles.length > 0 && (
-          <View style={s.countersRow}>
-            <View style={[s.counterPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="heart" size={14} color={colors.accentPink} />
-              <Text style={[s.counterText, { color: colors.textPrimary }]}>
-                {remainingLikes}
-              </Text>
-            </View>
-            <View style={[s.counterPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={s.starEmoji}>✨</Text>
-              <Text style={[s.counterText, { color: colors.textPrimary }]}>
-                {remainingSuperLikes}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Main content */}
+        {/* SWIPE DECK */}
         {loading ? (
           <View style={s.centerWrap}>
             <ActivityIndicator color={colors.accentPink} size="large" />
@@ -282,73 +249,90 @@ export default function DiscoverScreen({ navigation }: any) {
               />
             </View>
 
-            {/* Action buttons */}
+            {/* ACTION BUTTONS ROW (3 circles) */}
             <View style={s.actionsRow}>
+              {/* PASS button (black/dark circle) */}
               <TouchableOpacity
-                style={[s.actionBtn, s.passBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+                style={s.passBtn}
                 onPress={() => profiles[0] && handleSwipeLeft(profiles[0])}
+                activeOpacity={0.85}
               >
-                <Ionicons name="close" size={28} color={colors.error} />
+                <Ionicons name="close" size={30} color="#fff" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={s.superLikeBtn} onPress={openSuperLike}>
+              {/* SUPER LIKE (purple gradient) */}
+              <TouchableOpacity
+                style={s.superBtn}
+                onPress={openSuperLike}
+                activeOpacity={0.85}
+              >
                 <LinearGradient
-                  colors={['#818CF8', '#C084FC']}
+                  colors={['#818CF8', '#6366F1', '#4F46E5']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={s.superLikeGrad}
+                  style={s.superGrad}
                 >
-                  <Text style={s.superLikeEmoji}>✨</Text>
+                  <Ionicons name="star" size={26} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
 
+              {/* LIKE (pink gradient) */}
               <TouchableOpacity
-                style={[s.actionBtn, s.likeBtn]}
+                style={s.likeBtn}
                 onPress={() => profiles[0] && handleSwipeRight(profiles[0])}
+                activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={colors.accentGradientAlt as any}
+                  colors={['#FF5E8A', '#FF6B9D', '#F472B6']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={s.likeGrad}
                 >
-                  <Ionicons name="heart" size={28} color="#fff" />
+                  <Ionicons name="checkmark" size={30} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           </>
         )}
 
-        {/* Floating tab bar */}
+        {/* 4-TAB FLOATING BAR */}
         <View style={[s.tabBarWrap, { backgroundColor: isDark ? 'rgba(10,11,26,0.85)' : 'rgba(255,255,255,0.85)' }]}>
           <BlurView intensity={isDark ? 80 : 60} tint={isDark ? 'dark' : 'light'} style={s.tabBarBlur}>
             <View style={[s.tabBarInner, { borderColor: colors.border }]}>
-              <TouchableOpacity style={s.tab} activeOpacity={0.7}>
-                <Ionicons name="compass" size={22} color={colors.accentPink} />
-                <Text style={[s.tabLbl, { color: colors.accentPink }]}>{t('discover.title')}</Text>
-                <View style={[s.tabDot, { backgroundColor: colors.accentPink }]} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.tab}
-                activeOpacity={0.7}
+              <TabItem
+                icon="heart"
+                label="Discover"
+                active
+                color={colors.accentPink}
+                inactiveColor={colors.tabInactive}
+                onPress={() => {}}
+              />
+              <TabItem
+                icon="compass"
+                label="Explore"
+                color={colors.accentPink}
+                inactiveColor={colors.tabInactive}
+                onPress={() => navigation.navigate('Explore')}
+              />
+              <TabItem
+                icon="chatbubble"
+                label="Chat"
+                color={colors.accentPink}
+                inactiveColor={colors.tabInactive}
+                badge={0}
                 onPress={() => navigation.navigate('Home', { initialTab: 'messages' })}
-              >
-                <Ionicons name="chatbubble-outline" size={22} color={colors.tabInactive} />
-                <Text style={[s.tabLbl, { color: colors.tabInactive }]}>{t('home.tabMessages')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.tab}
-                activeOpacity={0.7}
+              />
+              <TabItem
+                icon="menu"
+                label="Menu"
+                color={colors.accentPink}
+                inactiveColor={colors.tabInactive}
                 onPress={() => navigation.navigate('Profile')}
-              >
-                <Ionicons name="person-outline" size={22} color={colors.tabInactive} />
-                <Text style={[s.tabLbl, { color: colors.tabInactive }]}>{t('home.tabProfile')}</Text>
-              </TouchableOpacity>
+              />
             </View>
           </BlurView>
         </View>
 
-        {/* Super like modal */}
         <SuperLikeModal
           profile={superLikeProfile}
           visible={showSuperLikeModal}
@@ -363,129 +347,224 @@ export default function DiscoverScreen({ navigation }: any) {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-  },
-  logo: { fontSize: 28, fontWeight: '800', letterSpacing: -1 },
-  avatarBtn: { borderRadius: 22, overflow: 'hidden' },
-  avatarGrad: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  avatarTxt: { fontSize: 17, fontWeight: '800', color: '#fff' },
+function TabItem({
+  icon,
+  label,
+  active = false,
+  color,
+  inactiveColor,
+  badge = 0,
+  onPress,
+}: {
+  icon: any;
+  label: string;
+  active?: boolean;
+  color: string;
+  inactiveColor: string;
+  badge?: number;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={s.tab} activeOpacity={0.7} onPress={onPress}>
+      <View style={{ position: 'relative' }}>
+        <Ionicons name={active ? icon : `${icon}-outline`} size={22} color={active ? color : inactiveColor} />
+        {badge > 0 && (
+          <View style={s.tabBadge}>
+            <Text style={s.tabBadgeText}>{badge}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[s.tabLbl, { color: active ? color : inactiveColor }]}>{label}</Text>
+      {active && <View style={[s.tabDot, { backgroundColor: color }]} />}
+    </TouchableOpacity>
+  );
+}
 
-  countersRow: {
+const s = StyleSheet.create({
+  bg: { flex: 1 },
+  safeArea: { flex: 1 },
+
+  // Top bar
+  topBar: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 20,
-    marginTop: 4,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  counterPill: {
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    position: 'relative',
+  },
+  sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
     borderWidth: 1,
   },
-  counterText: { fontSize: 13, fontWeight: '700' },
-  starEmoji: { fontSize: 14 },
+  sortText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  topRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  boostPill: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#0D9488',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  boostGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  boostNumber: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  notifDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#FF6B9D',
+    borderWidth: 2,
+    borderColor: '#0A0B1A',
+  },
 
+  // Deck wrap
+  deckWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 4,
+  },
+
+  // Action buttons row
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 22,
+    paddingVertical: 18,
+    marginBottom: 110,
+  },
+  passBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  superBtn: {
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  superGrad: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  likeBtn: {
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#FF6B9D',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  likeGrad: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Center states
   centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyEmoji: { fontSize: 56, marginBottom: 16 },
   emptyTitle: { fontSize: 22, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
   emptySub: { fontSize: 15, fontWeight: '500', textAlign: 'center', marginTop: 8, lineHeight: 22 },
 
-  deckWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
-
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 18,
-    paddingVertical: 18,
-    marginBottom: 110,
-  },
-  actionBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  passBtn: {
-    borderWidth: 2,
-  },
-  likeBtn: {
-    overflow: 'hidden',
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  likeGrad: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  superLikeBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-    shadowColor: '#818CF8',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  superLikeGrad: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  superLikeEmoji: { fontSize: 24 },
-
-  // Floating glassmorphism tab bar (same as HomeScreen)
+  // Tab bar
   tabBarWrap: {
     position: 'absolute',
     bottom: 20,
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     borderRadius: 32,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 30,
     elevation: 20,
   },
   tabBarBlur: { borderRadius: 32, overflow: 'hidden' },
   tabBarInner: {
     flexDirection: 'row',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
     borderRadius: 32,
     borderWidth: 1,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     position: 'relative',
     paddingVertical: 4,
   },
-  tabLbl: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  tabDot: { position: 'absolute', bottom: -8, width: 4, height: 4, borderRadius: 2 },
+  tabLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+  tabDot: { position: 'absolute', bottom: -6, width: 4, height: 4, borderRadius: 2 },
+  tabBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF6B9D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  tabBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff' },
 });
