@@ -451,22 +451,36 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
 
       {/* Prompt Modal */}
       <Modal visible={!!activePromptKey} transparent animationType="slide">
-        <View style={cs.modalOverlay}>
-          <View style={cs.modalContent}>
-            <Text style={cs.modalTitle}>{PROMPT_OPTIONS.find(p => p.key === activePromptKey)?.title}</Text>
-            <TextInput style={cs.modalInput} placeholder="Yanitini yaz..." placeholderTextColor="rgba(255,255,255,0.3)" value={promptAnswer} onChangeText={setPromptAnswer} maxLength={200} multiline />
-            <Text style={cs.modalCharCount}>{promptAnswer.length}/200</Text>
-            <View style={cs.modalBtns}>
-              {selectedPrompts.find(p => p.key === activePromptKey) && (
-                <Pressable onPress={deletePrompt} style={cs.modalDeleteBtn}><Text style={cs.modalDeleteText}>Sil</Text></Pressable>
-              )}
-              <Pressable onPress={() => { setActivePromptKey(null); setPromptAnswer(''); }} style={cs.modalCancelBtn}><Text style={cs.modalCancelText}>Iptal</Text></Pressable>
-              <Pressable onPress={savePrompt} disabled={promptAnswer.trim().length < 3}>
-                <LinearGradient colors={promptAnswer.trim().length >= 3 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']} style={cs.modalSaveBtn}><Text style={cs.modalSaveText}>Kaydet</Text></LinearGradient>
-              </Pressable>
-            </View>
-          </View>
-        </View>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={cs.modalOverlay} onPress={() => { setActivePromptKey(null); setPromptAnswer(''); }}>
+            <Pressable style={cs.modalContent} onPress={(e) => e.stopPropagation()}>
+              <View style={cs.modalHandle} />
+              <Text style={cs.modalTitle}>{PROMPT_OPTIONS.find(p => p.key === activePromptKey)?.title}</Text>
+              <TextInput
+                style={cs.modalInput}
+                placeholder="Yanitini yaz..."
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                value={promptAnswer}
+                onChangeText={setPromptAnswer}
+                maxLength={200}
+                multiline
+                autoFocus
+              />
+              <View style={cs.modalFooter}>
+                <Text style={cs.modalCharCount}>{promptAnswer.length}/200</Text>
+                <View style={cs.modalBtns}>
+                  {selectedPrompts.find(p => p.key === activePromptKey) && (
+                    <Pressable onPress={deletePrompt} style={cs.modalDeleteBtn}><Text style={cs.modalDeleteText}>Sil</Text></Pressable>
+                  )}
+                  <Pressable onPress={() => { setActivePromptKey(null); setPromptAnswer(''); }} style={cs.modalCancelBtn}><Text style={cs.modalCancelText}>Iptal</Text></Pressable>
+                  <Pressable onPress={savePrompt} disabled={promptAnswer.trim().length < 3}>
+                    <LinearGradient colors={promptAnswer.trim().length >= 3 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']} style={cs.modalSaveBtn}><Text style={cs.modalSaveText}>Kaydet</Text></LinearGradient>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -511,11 +525,13 @@ const cs = StyleSheet.create({
   savingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16 },
   savingText: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: Colors.gold },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  modalContent: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
-  modalTitle: { fontFamily: Fonts.heading, fontSize: 20, color: Colors.white, marginBottom: 16 },
-  modalInput: { backgroundColor: Colors.white05, borderWidth: 1, borderColor: Colors.white10, borderRadius: 16, padding: 14, fontFamily: Fonts.body, fontSize: 14, color: Colors.white, minHeight: 80, textAlignVertical: 'top' },
-  modalCharCount: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white30, textAlign: 'right', marginTop: 4 },
-  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 16, justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingTop: 12 },
+  modalHandle: { width: 36, height: 4, borderRadius: 99, backgroundColor: Colors.white15, alignSelf: 'center', marginBottom: 16 },
+  modalTitle: { fontFamily: Fonts.heading, fontSize: 20, color: Colors.white, marginBottom: 12 },
+  modalInput: { backgroundColor: Colors.white05, borderWidth: 1, borderColor: Colors.white10, borderRadius: 16, padding: 14, fontFamily: Fonts.body, fontSize: 14, color: Colors.white, minHeight: 70, maxHeight: 120, textAlignVertical: 'top' },
+  modalFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  modalCharCount: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white30 },
+  modalBtns: { flexDirection: 'row', gap: 8 },
   modalDeleteBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,100,100,0.3)' },
   modalDeleteText: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: '#ff6b6b' },
   modalCancelBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: Colors.white15 },
