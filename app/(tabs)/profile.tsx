@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Fonts, Typography } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useProfileStore } from '../../src/stores/profileStore';
+import { supabase } from '../../src/lib/supabase';
 
 const INTEREST_EMOJIS: Record<string, string> = {
   'Seyahat': '✈️', 'Fotograf': '📸', 'Muzik': '🎵', 'Spor': '⚽',
@@ -35,6 +36,25 @@ export default function ProfileScreen() {
         router.replace('/');
       }},
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Hesabi Sil',
+      'Hesabini kalici olarak silmek istediginize emin misiniz? Bu islem geri alinamaz.',
+      [
+        { text: 'Iptal', style: 'cancel' },
+        { text: 'Hesabi Sil', style: 'destructive', onPress: async () => {
+          try {
+            await supabase.functions.invoke('delete-user', { body: {} });
+            await signOut();
+            router.replace('/');
+          } catch {
+            Alert.alert('Hata', 'Hesap silinemedi. Tekrar deneyin.');
+          }
+        }},
+      ]
+    );
   };
 
   // Build info grid from real data
@@ -137,6 +157,10 @@ export default function ProfileScreen() {
           <Pressable onPress={handleLogout} style={styles.logoutBtn}>
             <Text style={styles.logoutText}>Cikis Yap</Text>
           </Pressable>
+
+          <Pressable onPress={handleDeleteAccount} style={styles.deleteBtn}>
+            <Text style={styles.deleteText}>Hesabi Sil</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -187,4 +211,6 @@ const styles = StyleSheet.create({
   infoCellVal: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: Colors.white80 },
   logoutBtn: { marginTop: 28, borderWidth: 1, borderColor: 'rgba(255,100,100,0.3)', borderRadius: 14, height: 48, alignItems: 'center', justifyContent: 'center' },
   logoutText: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: '#ff6b6b' },
+  deleteBtn: { marginTop: 12, borderRadius: 14, height: 48, alignItems: 'center', justifyContent: 'center' },
+  deleteText: { fontFamily: Fonts.body, fontSize: 13, color: 'rgba(255,100,100,0.4)' },
 });
