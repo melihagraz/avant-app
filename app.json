@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Avant",
-    "slug": "avant2",
-    "version": "1.0.0",
+    "slug": "avant",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,13 +14,18 @@
       "backgroundColor": "#08080f"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.avant.dating",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#08080f"
       },
+      "package": "com.avant.dating",
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -30,6 +35,12 @@
     "plugins": [
       "expo-router",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8e815905-5d90-4b90-9ce0-146abe07b807"
+      }
+    },
+    "owner": "melihagraz3"
   }
 }
