@@ -7,6 +7,14 @@ import { Colors, Fonts, Typography } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useProfileStore } from '../../src/stores/profileStore';
 
+const INTEREST_EMOJIS: Record<string, string> = {
+  'Seyahat': '✈️', 'Fotograf': '📸', 'Muzik': '🎵', 'Spor': '⚽',
+  'Yemek': '🍳', 'Kahve': '☕', 'Kitap': '📚', 'Sanat': '🎨',
+  'Film': '🎬', 'Doga': '🌿', 'Yoga': '🧘', 'Dans': '💃',
+  'Oyun': '🎮', 'Teknoloji': '💻', 'Bilim': '🧬', 'Kamp': '⛺',
+  'Arastirma': '🧬',
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile: authProfile, signOut } = useAuthStore();
@@ -29,12 +37,18 @@ export default function ProfileScreen() {
     ]);
   };
 
+  // Build info grid from real data
   const infoItems = [
-    { label: 'Egitim', value: p?.education || '-' },
-    { label: 'Niyet', value: p?.dating_intention || '-' },
-    { label: 'Sehir', value: p?.city || '-' },
-    { label: 'Yas', value: p?.age ? String(p.age) : '-' },
-  ];
+    p?.education ? { label: 'Egitim', value: p.education } : null,
+    p?.dating_intention ? { label: 'Niyet', value: intentionLabel(p.dating_intention) } : null,
+    p?.city ? { label: 'Sehir', value: p.city } : null,
+    p?.age ? { label: 'Yas', value: String(p.age) } : null,
+    p?.job ? { label: 'Meslek', value: p.job } : null,
+    p?.family_plans ? { label: 'Aile', value: familyLabel(p.family_plans) } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
+
+  const interests = p?.interests || [];
+  const bio = p?.prompts?.map(pr => pr.answer).join('\n\n') || '';
 
   return (
     <View style={styles.container}>
@@ -60,12 +74,14 @@ export default function ProfileScreen() {
 
           <View style={styles.heroInfo}>
             <Text style={styles.heroName}>{p?.name || 'Profil'}{p?.age ? `, ${p.age}` : ''}</Text>
-            <Text style={styles.heroSub}>{p?.city || ''}{p?.job ? ` - ${p.job}` : ''}</Text>
+            <Text style={styles.heroSub}>
+              {[p?.city, p?.job].filter(Boolean).join(' · ')}
+            </Text>
           </View>
         </View>
 
         <View style={styles.body}>
-          {/* Strength */}
+          {/* Profile Strength */}
           <View style={styles.strengthCard}>
             <View>
               <Text style={styles.strengthLabel}>PROFIL GUCU</Text>
@@ -80,26 +96,42 @@ export default function ProfileScreen() {
             </Svg>
           </View>
 
-          {/* Bio */}
-          {p?.prompts && p.prompts.length > 0 && (
+          {/* About / Bio */}
+          {bio ? (
             <>
-              <Text style={styles.secTitle}>Hakkimda</Text>
-              {p.prompts.map((prompt, i) => (
-                <Text key={i} style={styles.bioText}>{prompt.answer}</Text>
-              ))}
+              <Text style={styles.secTitle}>HAKKIMDA</Text>
+              <Text style={styles.bioText}>{bio}</Text>
+            </>
+          ) : null}
+
+          {/* Interests */}
+          {interests.length > 0 && (
+            <>
+              <Text style={styles.secTitle}>ILGI ALANLARI</Text>
+              <View style={styles.tags}>
+                {interests.map((interest) => (
+                  <View key={interest} style={styles.tag}>
+                    <Text style={styles.tagText}>{INTEREST_EMOJIS[interest] || '•'} {interest}</Text>
+                  </View>
+                ))}
+              </View>
             </>
           )}
 
           {/* Info Grid */}
-          <Text style={styles.secTitle}>Temel Bilgiler</Text>
-          <View style={styles.infoGrid}>
-            {infoItems.map((item) => (
-              <View key={item.label} style={styles.infoCell}>
-                <Text style={styles.infoCellLabel}>{item.label}</Text>
-                <Text style={styles.infoCellVal}>{item.value}</Text>
+          {infoItems.length > 0 && (
+            <>
+              <Text style={styles.secTitle}>TEMEL BILGILER</Text>
+              <View style={styles.infoGrid}>
+                {infoItems.map((item) => (
+                  <View key={item.label} style={styles.infoCell}>
+                    <Text style={styles.infoCellLabel}>{item.label}</Text>
+                    <Text style={styles.infoCellVal}>{item.value}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </>
+          )}
 
           {/* Logout */}
           <Pressable onPress={handleLogout} style={styles.logoutBtn}>
@@ -109,6 +141,21 @@ export default function ProfileScreen() {
       </ScrollView>
     </View>
   );
+}
+
+function intentionLabel(value: string): string {
+  const map: Record<string, string> = {
+    life_partner: 'Hayat arkadasi', long_term: 'Ciddi iliski',
+    short_term: 'Kisa iliski', figuring_out: 'Kesfediyorum',
+  };
+  return map[value] || value;
+}
+
+function familyLabel(value: string): string {
+  const map: Record<string, string> = {
+    want: 'Istiyorum', dont_want: 'Istemiyorum', open: 'Acigim', not_sure: 'Emin degilim',
+  };
+  return map[value] || value;
 }
 
 const styles = StyleSheet.create({
@@ -129,12 +176,15 @@ const styles = StyleSheet.create({
   strengthLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.goldMuted, letterSpacing: 0.6, marginBottom: 4 },
   strengthVal: { fontSize: 24, fontWeight: '600', color: Colors.gold },
   strengthSub: { fontSize: 13, color: Colors.white35, fontWeight: '400' },
-  secTitle: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.white30, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
+  secTitle: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: Colors.white30, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10, marginTop: 4 },
   bioText: { fontFamily: Fonts.body, fontSize: 14, color: 'rgba(255,255,255,0.68)', lineHeight: 23, marginBottom: 20 },
-  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  infoCell: { backgroundColor: Colors.white04, borderRadius: 12, padding: 11, paddingHorizontal: 14, width: '48%' },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
+  tag: { backgroundColor: Colors.white05, borderWidth: 1, borderColor: Colors.white10, borderRadius: 99, paddingVertical: 6, paddingHorizontal: 14 },
+  tagText: { fontFamily: Fonts.body, fontSize: 13, color: Colors.white65 },
+  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  infoCell: { backgroundColor: Colors.white04, borderRadius: 12, padding: 12, paddingHorizontal: 14, width: '48%' },
   infoCellLabel: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white30, marginBottom: 3 },
   infoCellVal: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: Colors.white80 },
-  logoutBtn: { marginTop: 32, borderWidth: 1, borderColor: 'rgba(255,100,100,0.3)', borderRadius: 14, height: 48, alignItems: 'center', justifyContent: 'center' },
+  logoutBtn: { marginTop: 28, borderWidth: 1, borderColor: 'rgba(255,100,100,0.3)', borderRadius: 14, height: 48, alignItems: 'center', justifyContent: 'center' },
   logoutText: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: '#ff6b6b' },
 });

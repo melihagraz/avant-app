@@ -17,6 +17,7 @@ export interface UserProfile {
   alcohol?: string;
   smoking?: string;
   job?: string;
+  interests?: string[];
   prompts?: UserPromptAnswer[];
   is_premium: boolean;
   is_discoverable: boolean;
