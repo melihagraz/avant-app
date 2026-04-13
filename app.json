@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "avant",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -45,6 +45,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Avant yakininizdaki kisileri bulmak icin konumunuzu kullanir."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#E8B86D"
         }
       ]
     ],
