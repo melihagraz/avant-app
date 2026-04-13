@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,18 +7,31 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Colors, Typography, Fonts } from '../src/theme';
+import { useAuthStore } from '../src/stores/authStore';
 
 export default function SplashScreen() {
   const router = useRouter();
+  const { session, hasAgent } = useAuthStore();
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (session) {
+      if (hasAgent) {
+        router.replace('/(tabs)/discover');
+      } else {
+        router.replace('/screens/profile-setup');
+      }
+    }
+  }, [session, hasAgent]);
 
   const handleStart = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/screens/profile-setup');
+    router.push('/screens/auth');
   };
 
   const handleLogin = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/(tabs)/discover');
+    router.push('/screens/auth');
   };
 
   return (

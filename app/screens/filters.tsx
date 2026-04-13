@@ -2,8 +2,9 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
 import { Colors, Fonts, Typography } from '../../src/theme';
+import { useFiltersStore } from '../../src/stores/filtersStore';
+import { useDiscoverStore } from '../../src/stores/discoverStore';
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -18,14 +19,15 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 export default function FiltersScreen() {
   const router = useRouter();
-  const [verified, setVerified] = useState(true);
+  const filters = useFiltersStore();
+  const { fetchFeed } = useDiscoverStore();
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Filtreler</Text>
-        <Pressable>
+        <Pressable onPress={() => filters.reset()}>
           <Text style={styles.reset}>Sifirla</Text>
         </Pressable>
       </View>
@@ -122,12 +124,12 @@ export default function FiltersScreen() {
               <Text style={styles.itemLabel}>Dogrulanmis profiller</Text>
               <Text style={styles.itemSub}>Sadece dogrulanmislar</Text>
             </View>
-            <Toggle on={verified} onToggle={() => setVerified(!verified)} />
+            <Toggle on={filters.verifiedOnly} onToggle={() => filters.setFilter('verifiedOnly', !filters.verifiedOnly)} />
           </View>
         </View>
 
         {/* Apply button */}
-        <Pressable onPress={() => router.back()} style={{ marginTop: 8, marginBottom: 24 }}>
+        <Pressable onPress={async () => { await filters.persist(); fetchFeed(); router.back(); }} style={{ marginTop: 8, marginBottom: 24 }}>
           {({ pressed }) => (
             <LinearGradient
               colors={[Colors.gold, Colors.goldDark]}

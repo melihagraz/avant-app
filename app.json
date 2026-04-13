@@ -34,9 +34,23 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Avant profilinize fotograf eklemek icin foto galeri erisimi gereklidir."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Avant yakininizdaki kisileri bulmak icin konumunuzu kullanir."
+        }
+      ]
     ],
     "extra": {
+      "supabaseUrl": "https://ertyxalazqtmdowjdzsq.supabase.co",
+      "supabaseAnonKey": "sb_publishable_MYoZp-UGpXA8s4JzutonGQ_YUOr2-FB",
       "eas": {
         "projectId": "8e815905-5d90-4b90-9ce0-146abe07b807"
       }

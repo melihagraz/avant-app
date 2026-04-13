@@ -15,6 +15,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { Colors } from '../src/theme';
+import { useAuthStore } from '../src/stores/authStore';
+import { useFiltersStore } from '../src/stores/filtersStore';
+import { processSyncQueue } from '../src/lib/syncQueue';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,13 +30,24 @@ export default function RootLayout() {
     DMSerifDisplay_400Regular,
   });
 
+  const initialize = useAuthStore((s) => s.initialize);
+  const isReady = useAuthStore((s) => s.isReady);
+  const loadFilters = useFiltersStore((s) => s.load);
+
   useEffect(() => {
-    if (fontsLoaded) {
+    initialize();
+    loadFilters();
+    // Process any queued messages from previous offline session
+    processSyncQueue().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded && isReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, isReady]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !isReady) return null;
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -47,6 +61,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="screens/auth" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="screens/profile-setup" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="screens/agent-match" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="screens/match-screen" options={{ animation: 'fade' }} />
