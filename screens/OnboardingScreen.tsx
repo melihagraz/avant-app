@@ -443,7 +443,7 @@ export default function OnboardingScreen({ navigation }: any) {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const user = sessionData?.session?.user;
-      if (!user) { navigation.replace('Home'); return; }
+      if (!user) { navigation.replace('Main'); return; }
 
       const [ageMin, ageMax] = (finalAnswers.age_range || '18-80').split('-').map(Number);
 
@@ -524,7 +524,7 @@ export default function OnboardingScreen({ navigation }: any) {
       });
 
       await supabase.functions.invoke('start-match', { body: { user_id: user.id } });
-      navigation.replace('Home');
+      navigation.replace('Main');
     } catch (err) {
       captureError(err, { context: 'onboarding_finalize' });
       setSaving(false);
@@ -736,7 +736,7 @@ export default function OnboardingScreen({ navigation }: any) {
                 <LinearGradient colors={colors.accentGradientAlt as any} style={s.avA}>
                   <Text style={s.avTxt}>A</Text>
                 </LinearGradient>
-                <View style={[s.bblA, { backgroundColor: colors.card, shadowColor: colors.shadow }]}><ActivityIndicator size="small" color="#FF6B9D" /></View>
+                <View style={[s.bblA, { backgroundColor: colors.card, shadowColor: colors.shadow }]}><ActivityIndicator size="small" color="#E8B86D" /></View>
               </View>
             )}
           </ScrollView>
@@ -846,7 +846,7 @@ const s = StyleSheet.create({
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   backBtnTxt: { fontSize: 32, fontWeight: '300', lineHeight: 34 },
   logo: { fontSize: 22, fontWeight: '800', color: '#2D1B4E', letterSpacing: -0.5 },
-  accent: { color: '#FF6B9D' },
+  accent: { color: '#E8B86D' },
   progBar: { flex: 1, height: 6, backgroundColor: '#F0EBF7', borderRadius: 3, overflow: 'hidden' },
   progFill: { height: '100%', borderRadius: 3 },
   stepLbl: { fontSize: 13, color: '#9B8AB8', minWidth: 28, textAlign: 'right', fontWeight: '700' },

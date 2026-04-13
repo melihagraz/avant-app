@@ -1,14 +1,14 @@
 // components/DiscoverProfileCard.tsx
-// Full-screen Muzz-quality profile card for Discover feed
 import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../lib/theme';
+import { FONT_HEADING, FONT_BODY_MEDIUM } from '../lib/fonts';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - 32;
-const CARD_HEIGHT = SCREEN_HEIGHT * 0.72;
+const CARD_WIDTH = SCREEN_WIDTH - 28;
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.62;
 
 export interface DiscoverProfile {
   id: string;
@@ -22,13 +22,13 @@ export interface DiscoverProfile {
   education?: string;
   religion?: string;
   job?: string;
+  agent_score?: number;
 }
 
 interface Props {
   profile: DiscoverProfile;
 }
 
-// Relationship intention label
 const intentionLabels: Record<string, string> = {
   life_partner: 'Life partner',
   long_term: 'Long-term',
@@ -45,83 +45,78 @@ export default function DiscoverProfileCard({ profile }: Props) {
   const { colors } = useTheme();
   const hasPhoto = profile.photos?.length > 0;
 
-  // Build tag list (max 4-5 pills)
-  const tags: Array<{ icon: string; label: string }> = [];
-  if (profile.city) tags.push({ icon: 'location', label: profile.city });
-  if (profile.job) tags.push({ icon: 'briefcase', label: profile.job });
-  if (profile.education) tags.push({ icon: 'school', label: profile.education });
-  if (profile.religion) tags.push({ icon: 'moon', label: profile.religion });
+  const tags: string[] = [];
+  if (profile.job) tags.push(profile.job);
+  if (profile.education) tags.push(profile.education);
   if (profile.dating_intention && intentionLabels[profile.dating_intention]) {
-    tags.push({ icon: 'heart', label: intentionLabels[profile.dating_intention] });
+    tags.push(intentionLabels[profile.dating_intention]);
   }
+
+  const firstPrompt = profile.prompts?.[0];
 
   return (
     <View style={s.card}>
-      {/* Full-bleed photo */}
       {hasPhoto ? (
         <Image source={{ uri: profile.photos[0] }} style={s.photo} resizeMode="cover" />
       ) : (
-        <LinearGradient colors={colors.accentGradient as any} style={s.photo}>
+        <View style={s.placeholderBg}>
           <View style={s.silhouette}>
-            <Ionicons name="person" size={120} color="rgba(255,255,255,0.4)" />
+            <Ionicons name="person" size={100} color="rgba(255,255,255,0.3)" />
           </View>
-        </LinearGradient>
+        </View>
       )}
 
-      {/* Top "Active today" pill */}
-      <View style={s.topPill}>
-        <View style={s.greenDot} />
-        <Text style={s.topPillText}>Active today</Text>
-      </View>
+      {/* Agent compat score badge */}
+      {profile.agent_score && profile.agent_score > 0 && (
+        <View style={s.agentScoreBadge}>
+          <Ionicons name="checkmark-circle" size={12} color="#C09AFF" />
+          <Text style={s.agentScoreText}>%{profile.agent_score} uyumlu</Text>
+        </View>
+      )}
 
-      {/* Photo count indicator top-right */}
+      {/* Photo count */}
       {profile.photos && profile.photos.length > 1 && (
-        <View style={s.photoCountBadge}>
-          <Ionicons name="images" size={13} color="#fff" />
+        <View style={s.photoCount}>
+          <Ionicons name="images" size={12} color="#fff" />
           <Text style={s.photoCountText}>{profile.photos.length}</Text>
         </View>
       )}
 
-      {/* Strong bottom gradient */}
+      {/* Bottom gradient + info */}
       <LinearGradient
-        colors={[
-          'transparent',
-          'rgba(0,0,0,0.2)',
-          'rgba(0,0,0,0.85)',
-          'rgba(0,0,0,0.96)',
-        ]}
-        locations={[0, 0.4, 0.75, 1]}
-        style={s.gradientOverlay}
+        colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.93)']}
+        locations={[0, 0.35, 1]}
+        style={s.gradient}
       >
-        <View style={s.infoBlock}>
-          {/* Name + age + verified */}
+        <View style={s.info}>
           <View style={s.nameRow}>
-            <Text style={s.name} numberOfLines={1}>
-              {profile.name}{' '}
-              <Text style={s.age}>{profile.age}</Text>
+            <Text style={s.name}>{profile.name}</Text>
+            <Text style={s.age}>{profile.age}</Text>
+          </View>
+
+          {profile.city && (
+            <Text style={s.location}>
+              {'\u{1F4CD}'} {profile.city}
             </Text>
-            <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />
-          </View>
+          )}
 
-          {/* Distance / location (uppercase small) */}
-          {profile.city ? (
-            <View style={s.locRow}>
-              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.85)" />
-              <Text style={s.locText}>{profile.city.toUpperCase()}</Text>
+          {tags.length > 0 && (
+            <View style={s.tagsRow}>
+              {tags.slice(0, 3).map((tag, i) => (
+                <View key={i} style={s.tag}>
+                  <Text style={s.tagText}>{tag}</Text>
+                </View>
+              ))}
             </View>
-          ) : null}
+          )}
 
-          {/* Tag chips */}
-          <View style={s.tagsWrap}>
-            {tags.slice(0, 5).map((tag, i) => (
-              <View key={i} style={s.tagChip}>
-                <Ionicons name={tag.icon as any} size={12} color="rgba(255,255,255,0.95)" />
-                <Text style={s.tagText} numberOfLines={1}>
-                  {tag.label}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {firstPrompt && (
+            <View style={s.quote}>
+              <Text style={s.quoteText} numberOfLines={2}>
+                "{firstPrompt.answer}"
+              </Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
     </View>
@@ -132,135 +127,127 @@ const s = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 32,
+    borderRadius: 26,
     overflow: 'hidden',
-    backgroundColor: '#1a1a2e',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.4,
-    shadowRadius: 32,
-    elevation: 16,
+    backgroundColor: '#1a1228',
   },
   photo: {
     width: '100%',
     height: '100%',
+  },
+  placeholderBg: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#2d1f3d',
     alignItems: 'center',
     justifyContent: 'center',
   },
   silhouette: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  topPill: {
+  agentScoreBadge: {
     position: 'absolute',
-    top: 20,
-    left: 20,
+    top: 12,
+    right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    gap: 5,
+    backgroundColor: 'rgba(124, 58, 237, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(160, 100, 255, 0.5)',
+    borderRadius: 99,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    zIndex: 10,
   },
-  greenDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
+  agentScoreText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DEC4FF',
   },
-  topPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.2,
-  },
-
-  photoCountBadge: {
+  photoCount: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    top: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   photoCountText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#fff',
   },
-
-  gradientOverlay: {
+  gradient: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 24,
-    paddingBottom: 28,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
     paddingTop: 80,
   },
-  infoBlock: { gap: 10 },
+  info: {
+    gap: 6,
+  },
   nameRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: 8,
   },
   name: {
-    fontSize: 36,
-    fontWeight: '900',
+    fontFamily: FONT_HEADING,
+    fontSize: 28,
     color: '#fff',
-    letterSpacing: -1,
-    flexShrink: 1,
   },
   age: {
-    fontSize: 32,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 22,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.65)',
   },
-  locRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 4,
-  },
-  locText: {
+  location: {
     fontSize: 12,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 0.8,
-  },
-
-  tagsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    color: 'rgba(255,255,255,0.45)',
     marginTop: 2,
   },
-  tagChip: {
+  tagsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    marginTop: 6,
+  },
+  tag: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 99,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   tagText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+    fontFamily: FONT_BODY_MEDIUM,
+  },
+  quote: {
+    marginTop: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  quoteText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.2,
-    maxWidth: 140,
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: 18,
   },
 });

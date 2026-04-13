@@ -28,7 +28,7 @@ export default function WelcomeScreen({ navigation }: any) {
   }, []);
 
   const steps = [
-    { emoji: '🎯', title: t('welcome.step1Title'), desc: t('welcome.step1Desc'), color: '#FF6B9D' },
+    { emoji: '🎯', title: t('welcome.step1Title'), desc: t('welcome.step1Desc'), color: '#E8B86D' },
     { emoji: '🤖', title: t('welcome.step2Title'), desc: t('welcome.step2Desc'), color: '#C084FC' },
     { emoji: '💬', title: t('welcome.step3Title'), desc: t('welcome.step3Desc'), color: '#818CF8' },
   ];
@@ -102,7 +102,7 @@ const s = StyleSheet.create({
   content: { flex: 1, padding: 24, paddingTop: 16, justifyContent: 'space-between' },
   logoWrap: { alignItems: 'flex-start', gap: 10 },
   logo: { fontSize: 48, fontWeight: '800', color: '#2D1B4E', letterSpacing: -2 },
-  accent: { color: '#FF6B9D' },
+  accent: { color: '#E8B86D' },
   agentPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 24, paddingHorizontal: 14, paddingVertical: 7, shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 3 },
   pillEmoji: { fontSize: 14 },
   pillTxt: { fontSize: 13, color: '#7C3AED', fontWeight: '700' },

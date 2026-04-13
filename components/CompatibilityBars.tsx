@@ -65,7 +65,7 @@ export default function CompatibilityBars({
             <View style={[s.track, { backgroundColor: colors.borderLight }, compact && s.trackCompact]}>
               <Animated.View style={[s.fill, { width: barWidth }]}>
                 <LinearGradient
-                  colors={colors.accentGradientAlt as any}
+                  colors={colors.goldGradient as any}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={StyleSheet.absoluteFillObject}
                 />

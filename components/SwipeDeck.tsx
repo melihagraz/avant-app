@@ -260,14 +260,14 @@ const s = StyleSheet.create({
   },
   passOverlay: {
     left: 24,
-    borderColor: '#FF6B9D',
-    backgroundColor: 'rgba(255,107,157,0.2)',
+    borderColor: '#ff4444',
+    backgroundColor: 'rgba(255,68,68,0.2)',
     transform: [{ rotate: '12deg' }],
   },
   passLabel: {
     fontSize: 32,
     fontWeight: '900',
-    color: '#FF6B9D',
+    color: '#ff4444',
     letterSpacing: 2,
   },
   detailOverlay: {

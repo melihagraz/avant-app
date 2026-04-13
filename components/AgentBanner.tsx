@@ -85,7 +85,7 @@ const s = StyleSheet.create({
     marginTop: 8,
     marginBottom: 12,
     borderRadius: 28,
-    shadowColor: '#FF6B9D',
+    shadowColor: '#E8B86D',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,

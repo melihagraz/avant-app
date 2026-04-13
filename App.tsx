@@ -2,19 +2,22 @@
 import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import React, { useEffect, useState, useRef } from 'react';
-import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Linking, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { supabase } from './lib/supabase';
 import { registerForPushNotifications, savePushToken } from './lib/notifications';
 import { ThemeProvider, useTheme } from './lib/theme';
+import { useAvantFonts } from './lib/fonts';
 import { initSentry, setSentryUser, Sentry } from './lib/sentry';
 import { setAnalyticsUser, trackEvent, trackScreen } from './lib/analytics';
 import './lib/i18n';
 import { useTranslation } from 'react-i18next';
 import { useOnlineStatus } from './lib/offline';
 import { processSyncQueue } from './lib/syncQueue';
+import BottomTabBar from './components/BottomTabBar';
 
 import AuthScreen from './screens/AuthScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -28,11 +31,26 @@ import MatchRevealScreen from './screens/MatchRevealScreen';
 import DiscoverScreen from './screens/DiscoverScreen';
 import AgentMatchesScreen from './screens/AgentMatchesScreen';
 import ExploreScreen from './screens/ExploreScreen';
+import AgentMatchScreen from './screens/AgentMatchScreen';
+import FilterScreen from './screens/FilterScreen';
 
-// Sentry'yi uygulama yüklenmeden önce başlat
 initSentry();
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <BottomTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Discover" component={DiscoverScreen} />
+      <Tab.Screen name="Chat" component={HomeScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
 
 function AppContent() {
   const [session, setSession] = useState<any>(null);
@@ -43,9 +61,9 @@ function AppContent() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const isOnline = useOnlineStatus();
+  const fontsLoaded = useAvantFonts();
   const wasOffline = useRef(false);
 
-  // Bağlantı geldiğinde bekleyen mesajları gönder
   useEffect(() => {
     if (isOnline && wasOffline.current) {
       processSyncQueue();
@@ -78,7 +96,6 @@ function AppContent() {
       if (url) handleDeepLink(url);
     });
 
-    // Timeout: Supabase yanıt vermezse 5 saniyede auth ekranına düş
     const timeout = setTimeout(() => setLoading(false), 5000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -146,24 +163,24 @@ function AppContent() {
       const token = await registerForPushNotifications();
       if (token) await savePushToken(userId, token);
     } catch (err) {
-      console.log('Push token hatası:', err);
+      console.log('Push token hatasi:', err);
     }
   };
 
-  if (loading) {
+  if (loading || !fontsLoaded) {
     return (
       <View style={[loadingStyles.container, { backgroundColor: colors.loadingBg }]}>
-        <ActivityIndicator size="large" color={colors.accentPurple} />
+        <ActivityIndicator size="large" color={colors.accentGold} />
       </View>
     );
   }
 
-  const initialRoute = !session ? 'Auth' : hasAgent ? 'Discover' : 'Welcome';
+  const initialRoute = !session ? 'Auth' : hasAgent ? 'Main' : 'Welcome';
 
   return (
     <View style={{ flex: 1 }}>
       {!isOnline && (
-        <View style={[loadingStyles.offlineBanner, { backgroundColor: colors.accentPink }]}>
+        <View style={[loadingStyles.offlineBanner, { backgroundColor: colors.accentGold }]}>
           <Text style={loadingStyles.offlineText}>{t('common.offline')}</Text>
         </View>
       )}
@@ -187,13 +204,18 @@ function AppContent() {
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        <Stack.Screen name="Discover" component={DiscoverScreen} />
+        <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="Explore" component={ExploreScreen} />
         <Stack.Screen name="AgentMatches" component={AgentMatchesScreen} />
+        <Stack.Screen name="AgentMatchDetail" component={AgentMatchScreen} />
+        <Stack.Screen
+          name="Filter"
+          component={FilterScreen}
+          options={{ animation: 'slide_from_bottom' }}
+        />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="HumanChat" component={HumanChatScreen} />
         <Stack.Screen name="AgentLog" component={AgentLogScreen} />
-        <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen
           name="ProfileDetail"
           component={ProfileDetailScreen}
@@ -236,7 +258,7 @@ const loadingStyles = StyleSheet.create({
     alignItems: 'center',
   },
   offlineText: {
-    color: '#fff',
+    color: '#1a0f00',
     fontSize: 13,
     fontWeight: '700',
   },

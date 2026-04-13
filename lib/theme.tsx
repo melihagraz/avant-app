@@ -20,12 +20,16 @@ export interface ThemeColors {
   border: string;
   borderLight: string;
 
-  // Accents (same in both themes)
-  accentPink: string;
+  // Accents
+  accentGold: string;
+  accentGoldDark: string;
   accentPurple: string;
+  accentPink: string;       // alias for accentGold (backward compat)
   accentIndigo: string;
   accentGradient: string[];
   accentGradientAlt: string[];
+  goldGradient: string[];
+  purpleGradient: string[];
 
   // Chat
   userBubble: string;
@@ -65,118 +69,125 @@ export interface ThemeColors {
 }
 
 const lightColors: ThemeColors = {
-  bgGradient: ['#FFF8FA', '#F8F5FF', '#F5FAFF'],
-  authGradient: ['#FFF0F5', '#FDE8EF', '#F0E6FF', '#E8F4FD'],
-  card: '#ffffff',
-  inputBg: '#F8F5FC',
-  loadingBg: '#FFF0F5',
+  bgGradient: ['#0D0D14', '#0D0D14', '#0D0D14'],
+  authGradient: ['#0D0D14', '#0D0D14', '#0D0D14', '#0D0D14'],
+  card: 'rgba(255, 255, 255, 0.05)',
+  inputBg: 'rgba(255, 255, 255, 0.06)',
+  loadingBg: '#0D0D14',
 
-  textPrimary: '#2D1B4E',
-  textSecondary: '#9B8AB8',
-  textMuted: '#8B7AA0',
-  textHint: '#B8A8CC',
-  placeholder: '#C4B5D0',
+  textPrimary: '#ffffff',
+  textSecondary: 'rgba(255, 255, 255, 0.65)',
+  textMuted: 'rgba(255, 255, 255, 0.5)',
+  textHint: 'rgba(255, 255, 255, 0.4)',
+  placeholder: 'rgba(255, 255, 255, 0.35)',
 
-  border: '#F0EBF7',
-  borderLight: '#F0EBF7',
+  border: 'rgba(255, 255, 255, 0.12)',
+  borderLight: 'rgba(255, 255, 255, 0.07)',
 
-  accentPink: '#FF6B9D',
-  accentPurple: '#C084FC',
-  accentIndigo: '#818CF8',
-  accentGradient: ['#FF6B9D', '#C084FC', '#818CF8'],
-  accentGradientAlt: ['#FF6B9D', '#C084FC'],
+  accentGold: '#E8B86D',
+  accentGoldDark: '#D4914A',
+  accentPurple: '#A064FF',
+  accentPink: '#E8B86D',
+  accentIndigo: '#A064FF',
+  accentGradient: ['#E8B86D', '#D4914A'],
+  accentGradientAlt: ['#E8B86D', '#D4914A'],
+  goldGradient: ['#E8B86D', '#D4914A'],
+  purpleGradient: ['#7c3aed', '#A064FF'],
 
-  userBubble: '#7C3AED',
-  userBubbleText: '#ffffff',
-  otherBubbleText: '#2D1B4E',
-  userAvatarBg: '#E8DEFF',
+  userBubble: '#E8B86D',
+  userBubbleText: '#1a0f00',
+  otherBubbleText: 'rgba(255, 255, 255, 0.88)',
+  userAvatarBg: '#3A2A1A',
 
-  success: '#00C853',
-  successGradient: ['#00C853', '#69F0AE'],
-  error: '#FF6B9D',
-  online: '#10B981',
+  success: '#4cd964',
+  successGradient: ['#4cd964', '#69F0AE'],
+  error: '#ff4444',
+  online: '#4cd964',
 
-  shadow: '#C084FC',
+  shadow: '#E8B86D',
 
-  overlayDark: 'rgba(45,27,78,0.85)',
-  overlayLight: 'rgba(255,255,255,0.85)',
+  overlayDark: 'rgba(13, 13, 20, 0.92)',
+  overlayLight: 'rgba(255, 255, 255, 0.06)',
 
-  disabledGradient: ['#E0D0E8', '#D8C8E0'],
+  disabledGradient: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)'],
 
   photoPlaceholders: [
-    { bg: '#FFE0EB', text: '#FF6B9D' },
-    { bg: '#E8DEFF', text: '#7C3AED' },
-    { bg: '#D6F5E8', text: '#10B981' },
-    { bg: '#FFE4D6', text: '#F97316' },
-    { bg: '#DBEAFE', text: '#3B82F6' },
+    { bg: '#3d2a4a', text: '#C09AFF' },
+    { bg: '#2a3d4a', text: '#64A0FF' },
+    { bg: '#2a4a3d', text: '#4cd964' },
+    { bg: '#4a3d2a', text: '#E8B86D' },
+    { bg: '#4a2a3d', text: '#FF6B9D' },
   ],
 
-  agentBGradient: ['#818CF8', '#3B82F6'],
+  agentBGradient: ['#7c3aed', '#A064FF'],
 
-  chevron: '#D4C8E0',
-  badge: 'rgba(0,0,0,0.5)',
-  tabInactive: '#C4B5D0',
+  chevron: 'rgba(255, 255, 255, 0.25)',
+  badge: 'rgba(0, 0, 0, 0.7)',
+  tabInactive: 'rgba(255, 255, 255, 0.4)',
   white: '#ffffff',
   black: '#000000',
-  separator: '#F0EBF7',
+  separator: 'rgba(255, 255, 255, 0.05)',
 };
 
 const darkColors: ThemeColors = {
-  // Deep Midnight palette - sofistike koyu lacivert/siyah
-  bgGradient: ['#05060F', '#0A0B1A', '#06070F'],
-  authGradient: ['#05060F', '#0D0718', '#0A0B1A', '#05060F'],
-  card: 'rgba(28, 22, 45, 0.6)',      // Yarı şeffaf cam efekti için
-  inputBg: 'rgba(36, 28, 56, 0.55)',
-  loadingBg: '#05060F',
+  bgGradient: ['#0D0D14', '#0D0D14', '#0D0D14'],
+  authGradient: ['#0D0D14', '#0D0D14', '#0D0D14', '#0D0D14'],
+  card: 'rgba(255, 255, 255, 0.05)',
+  inputBg: 'rgba(255, 255, 255, 0.06)',
+  loadingBg: '#0D0D14',
 
-  textPrimary: '#F5F0FF',
-  textSecondary: 'rgba(245, 240, 255, 0.65)',  // 65% opacity - apple HIG
-  textMuted: 'rgba(245, 240, 255, 0.5)',
-  textHint: 'rgba(245, 240, 255, 0.4)',
-  placeholder: 'rgba(245, 240, 255, 0.35)',
+  textPrimary: '#ffffff',
+  textSecondary: 'rgba(255, 255, 255, 0.65)',
+  textMuted: 'rgba(255, 255, 255, 0.5)',
+  textHint: 'rgba(255, 255, 255, 0.4)',
+  placeholder: 'rgba(255, 255, 255, 0.35)',
 
-  border: 'rgba(192, 132, 252, 0.15)',  // İnce mor glow
-  borderLight: 'rgba(192, 132, 252, 0.08)',
+  border: 'rgba(255, 255, 255, 0.12)',
+  borderLight: 'rgba(255, 255, 255, 0.07)',
 
-  accentPink: '#FF6B9D',
-  accentPurple: '#C084FC',
-  accentIndigo: '#818CF8',
-  accentGradient: ['#FF6B9D', '#C084FC', '#818CF8'],
-  accentGradientAlt: ['#FF6B9D', '#C084FC'],
+  accentGold: '#E8B86D',
+  accentGoldDark: '#D4914A',
+  accentPurple: '#A064FF',
+  accentPink: '#E8B86D',
+  accentIndigo: '#A064FF',
+  accentGradient: ['#E8B86D', '#D4914A'],
+  accentGradientAlt: ['#E8B86D', '#D4914A'],
+  goldGradient: ['#E8B86D', '#D4914A'],
+  purpleGradient: ['#7c3aed', '#A064FF'],
 
-  userBubble: '#7C3AED',
-  userBubbleText: '#ffffff',
-  otherBubbleText: '#F0E8FF',
-  userAvatarBg: '#3A2E55',
+  userBubble: '#E8B86D',
+  userBubbleText: '#1a0f00',
+  otherBubbleText: 'rgba(255, 255, 255, 0.88)',
+  userAvatarBg: '#3A2A1A',
 
-  success: '#00C853',
-  successGradient: ['#00C853', '#69F0AE'],
-  error: '#FF6B9D',
-  online: '#10B981',
+  success: '#4cd964',
+  successGradient: ['#4cd964', '#69F0AE'],
+  error: '#ff4444',
+  online: '#4cd964',
 
-  shadow: '#C084FC',  // Glow shadow - koyu arka planda görünmez olmasın
+  shadow: '#E8B86D',
 
-  overlayDark: 'rgba(5,6,15,0.92)',
-  overlayLight: 'rgba(28,22,45,0.75)',
+  overlayDark: 'rgba(13, 13, 20, 0.92)',
+  overlayLight: 'rgba(255, 255, 255, 0.06)',
 
-  disabledGradient: ['rgba(58,46,85,0.5)', 'rgba(46,36,69,0.5)'],
+  disabledGradient: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)'],
 
   photoPlaceholders: [
-    { bg: '#3A1A2A', text: '#FF6B9D' },
-    { bg: '#2E1E4A', text: '#C084FC' },
-    { bg: '#1A3A2A', text: '#10B981' },
-    { bg: '#3A2A1A', text: '#F97316' },
-    { bg: '#1A2A3A', text: '#3B82F6' },
+    { bg: '#3d2a4a', text: '#C09AFF' },
+    { bg: '#2a3d4a', text: '#64A0FF' },
+    { bg: '#2a4a3d', text: '#4cd964' },
+    { bg: '#4a3d2a', text: '#E8B86D' },
+    { bg: '#4a2a3d', text: '#FF6B9D' },
   ],
 
-  agentBGradient: ['#818CF8', '#3B82F6'],
+  agentBGradient: ['#7c3aed', '#A064FF'],
 
-  chevron: 'rgba(245,240,255,0.25)',
-  badge: 'rgba(0,0,0,0.7)',
-  tabInactive: 'rgba(245,240,255,0.4)',
+  chevron: 'rgba(255, 255, 255, 0.25)',
+  badge: 'rgba(0, 0, 0, 0.7)',
+  tabInactive: 'rgba(255, 255, 255, 0.4)',
   white: '#ffffff',
   black: '#000000',
-  separator: 'rgba(192,132,252,0.1)',
+  separator: 'rgba(255, 255, 255, 0.05)',
 };
 
 interface ThemeContextType {
@@ -185,8 +196,8 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  colors: lightColors,
-  isDark: false,
+  colors: darkColors,
+  isDark: true,
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

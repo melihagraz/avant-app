@@ -3,13 +3,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated,
+  Animated, Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
+import { FONT_HEADING, FONT_BODY_SEMIBOLD } from '../lib/fonts';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
@@ -17,6 +19,7 @@ import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEMO_EMAIL = Constants.expoConfig?.extra?.demoEmail || 'demo@avant.app';
 const DEMO_PASSWORD = Constants.expoConfig?.extra?.demoPassword || 'AvantDemo2026!';
+const OTP_LENGTH = 8;
 
 export default function AuthScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -28,13 +31,15 @@ export default function AuthScreen({ navigation }: any) {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const codeRef = useRef<TextInput>(null);
-  const bounceAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(bounceAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 50, friction: 9, useNativeDriver: true }),
+      Animated.spring(logoScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -58,7 +63,7 @@ export default function AuthScreen({ navigation }: any) {
         .eq('user_id', data.session.user.id)
         .single();
       trackEvent('login_success');
-      navigation.replace(agent ? 'Home' : 'Welcome');
+      navigation.replace(agent ? 'Main' : 'Welcome');
     } catch (e) {
       captureError(e);
       setError(t('auth.demoUnavailable'));
@@ -101,14 +106,14 @@ export default function AuthScreen({ navigation }: any) {
   const verifyOTP = async (codeOverride?: string) => {
     const otpCode = codeOverride || code;
 
-    // Rate limit: 5 doğrulama / 5 dakika
+    // Rate limit: 5 dogrulama / 5 dakika
     if (!canPerformAction('otp_verify', 5, 300000)) {
       const remaining = getRemainingCooldown('otp_verify', 5, 300000);
       setError(t('moderation.rateLimited', { seconds: remaining }));
       return;
     }
 
-    if (otpCode.length !== 8) {
+    if (otpCode.length !== OTP_LENGTH) {
       setError(t('auth.codeInvalid'));
       return;
     }
@@ -135,206 +140,411 @@ export default function AuthScreen({ navigation }: any) {
       .single();
 
     trackEvent('login_success');
-    navigation.replace(agent ? 'Home' : 'Onboarding');
+    navigation.replace(agent ? 'Main' : 'Welcome');
   };
 
+  // ── OTP Verification View ──
   if (sent) {
     return (
-      <LinearGradient colors={colors.authGradient as any} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+      <View style={s.bg}>
         <SafeAreaView style={s.container}>
-          <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <Animated.View style={[s.inner, { opacity: fadeAnim, transform: [{ scale: bounceAnim }] }]}>
-              <View style={s.top}>
-                <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.logoAccent, { color: colors.accentPink }]}>a</Text>nt</Text>
-                <Text style={s.sparkle}>✨</Text>
-              </View>
+          <KeyboardAvoidingView style={s.kavOtp} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            {/* Back button */}
+            <TouchableOpacity
+              style={s.backBtn}
+              onPress={() => { setSent(false); setCode(''); setError(''); }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
 
-              <View style={[s.card, { backgroundColor: colors.card }]}>
-                <Text style={[s.cardTitle, { color: colors.textPrimary }]}>{t('auth.enterCode')}</Text>
-                <Text style={[s.cardSub, { color: colors.textSecondary }]}>
-                  {t('auth.codeSent', { email })}
-                </Text>
+            <Animated.View style={[s.otpContent, { opacity: fadeAnim }]}>
+              <Text style={s.otpTitle}>{t('auth.enterCode')}</Text>
+              <Text style={s.otpSubtitle}>
+                {t('auth.codeSent', { email: email.trim().toLowerCase() })}
+              </Text>
 
-                <TouchableOpacity activeOpacity={0.9} onPress={() => codeRef.current?.focus()} style={s.otpRow}>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <View key={i} style={[
-                      s.otpBox,
-                      { backgroundColor: colors.inputBg, borderColor: colors.border },
-                      i < code.length && [s.otpBoxFilled, { borderColor: colors.accentPurple, backgroundColor: colors.inputBg }],
-                      error ? s.otpBoxErr : null,
-                    ]}>
-                      <Text style={[
-                        s.otpDigit,
-                        { color: colors.placeholder },
-                        i < code.length && [s.otpDigitFilled, { color: colors.userBubble }],
-                      ]}>{code[i] || ''}</Text>
-                    </View>
-                  ))}
-                </TouchableOpacity>
-                <TextInput
-                  ref={codeRef}
-                  style={s.otpHidden}
-                  value={code}
-                  onChangeText={v => {
-                    const cleaned = v.replace(/\D/g, '').slice(0, 8);
-                    setCode(cleaned);
-                    setError('');
-                    // 8 hane yapıştırıldığında otomatik doğrula
-                    if (cleaned.length === 8) {
-                      setTimeout(() => verifyOTP(cleaned), 100);
-                    }
-                  }}
-                  keyboardType="number-pad"
-                  maxLength={8}
-                  autoFocus
-                  caretHidden
-                />
-                {error ? <Text style={[s.errTxt, { color: colors.error }]}>{error}</Text> : null}
-
-                <TouchableOpacity
-                  style={[s.btn, (code.length !== 8 || verifying) && s.btnOff]}
-                  onPress={verifyOTP}
-                  disabled={code.length !== 8 || verifying}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient
-                    colors={(code.length !== 8 || verifying) ? colors.disabledGradient as any : colors.accentGradient as any}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={s.btnGrad}
-                  >
-                    {verifying
-                      ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={s.btnTxt}>{t('auth.loginBtn')}</Text>
-                    }
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                <View style={s.retryRow}>
-                  <TouchableOpacity style={s.retryBtn} onPress={() => { setSent(false); setCode(''); setError(''); }}>
-                    <Text style={[s.retryTxt, { color: colors.textSecondary }]}>{t('auth.tryDifferent')}</Text>
-                  </TouchableOpacity>
-                  <Text style={[s.retryDot, { color: colors.chevron }]}>·</Text>
-                  <TouchableOpacity style={s.retryBtn} onPress={sendOTP}>
-                    <Text style={[s.retryTxt, { color: colors.textSecondary }]}>{t('auth.resend')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </LinearGradient>
-    );
-  }
-
-  return (
-    <LinearGradient colors={colors.authGradient as any} style={s.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-      <SafeAreaView style={s.container}>
-        <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Animated.View style={[s.inner, { opacity: fadeAnim, transform: [{ scale: bounceAnim }] }]}>
-            <View style={s.top}>
-              <Text style={[s.logo, { color: colors.textPrimary }]}>av<Text style={[s.logoAccent, { color: colors.accentPink }]}>a</Text>nt</Text>
-              <Text style={s.sparkle}>✨</Text>
-              <Text style={[s.tagline, { color: colors.textSecondary }]}>{t('auth.tagline')}</Text>
-            </View>
-
-            <View style={[s.card, { backgroundColor: colors.card }]}>
-              <Text style={[s.cardLabel, { color: colors.textSecondary }]}>{t('auth.emailLabel')}</Text>
-              <TextInput
-                style={[s.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.textPrimary }, error ? s.inputErr : null]}
-                value={email}
-                onChangeText={v => { setEmail(v); setError(''); }}
-                placeholder={t('auth.emailPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="send"
-                onSubmitEditing={sendOTP}
-              />
-              {error ? <Text style={[s.errTxt, { color: colors.error }]}>{error}</Text> : null}
-
+              {/* OTP boxes */}
               <TouchableOpacity
-                style={s.btn}
-                onPress={sendOTP}
-                disabled={!email.trim() || loading}
+                activeOpacity={0.9}
+                onPress={() => codeRef.current?.focus()}
+                style={s.otpRow}
+              >
+                {Array.from({ length: OTP_LENGTH }).map((_, i) => {
+                  const filled = i < code.length;
+                  const active = i === code.length;
+                  return (
+                    <View
+                      key={i}
+                      style={[
+                        s.otpBox,
+                        filled && s.otpBoxFilled,
+                        active && s.otpBoxActive,
+                        error ? s.otpBoxErr : null,
+                      ]}
+                    >
+                      <Text style={[s.otpDigit, filled && s.otpDigitFilled]}>
+                        {code[i] || ''}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </TouchableOpacity>
+
+              <TextInput
+                ref={codeRef}
+                style={s.otpHidden}
+                value={code}
+                onChangeText={v => {
+                  const cleaned = v.replace(/\D/g, '').slice(0, OTP_LENGTH);
+                  setCode(cleaned);
+                  setError('');
+                  if (cleaned.length === OTP_LENGTH) {
+                    setTimeout(() => verifyOTP(cleaned), 100);
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={OTP_LENGTH}
+                autoFocus
+                caretHidden
+              />
+
+              {error ? <Text style={s.errTxt}>{error}</Text> : null}
+
+              {/* Verify button */}
+              <TouchableOpacity
+                style={[s.verifyBtn, (code.length !== OTP_LENGTH || verifying) && s.btnDisabled]}
+                onPress={() => verifyOTP()}
+                disabled={code.length !== OTP_LENGTH || verifying}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={colors.accentGradient as any}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={s.btnGrad}
+                  colors={
+                    (code.length !== OTP_LENGTH || verifying)
+                      ? (colors.disabledGradient as [string, string])
+                      : (colors.goldGradient as [string, string])
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={s.verifyBtnGrad}
                 >
-                  {loading
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={s.btnTxt}>{t('auth.continueBtn')}</Text>
+                  {verifying
+                    ? <ActivityIndicator color="#1a0f00" size="small" />
+                    : <Text style={[
+                        s.verifyBtnTxt,
+                        (code.length !== OTP_LENGTH || verifying) && { color: 'rgba(255,255,255,0.4)' },
+                      ]}>
+                        {t('auth.loginBtn')}
+                      </Text>
                   }
                 </LinearGradient>
               </TouchableOpacity>
 
-              <Text style={[s.hint, { color: colors.textHint }]}>
-                {t('auth.emailHint')}
-              </Text>
+              {/* Resend */}
+              <TouchableOpacity style={s.resendBtn} onPress={sendOTP} activeOpacity={0.7}>
+                <Text style={s.resendTxt}>{t('auth.resend')}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
-              <TouchableOpacity
-                style={[s.demoBtn, { borderTopColor: colors.border }]}
-                onPress={demoLogin}
-                disabled={loading}
-                activeOpacity={0.7}
+  // ── Initial View (email entry) ──
+  return (
+    <View style={s.bg}>
+      <SafeAreaView style={s.container}>
+        <KeyboardAvoidingView style={s.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          {/* Center: Logo + branding */}
+          <Animated.View style={[s.centerArea, {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }]}>
+            {/* Logo mark */}
+            <Animated.View style={[s.logoWrap, { transform: [{ scale: logoScale }] }]}>
+              <LinearGradient
+                colors={['#E8B86D', '#D4914A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.logoMark}
+              >
+                <Ionicons name="heart" size={40} color="#fff" />
+              </LinearGradient>
+            </Animated.View>
+
+            <Text style={s.brandName}>Avant</Text>
+            <Text style={s.tagline}>Your AI finds the connection</Text>
+          </Animated.View>
+
+          {/* Bottom: inputs + actions */}
+          <Animated.View style={[s.bottomArea, { opacity: fadeAnim }]}>
+            {/* Email input */}
+            <TextInput
+              style={[s.emailInput, error ? s.emailInputErr : null]}
+              value={email}
+              onChangeText={v => { setEmail(v); setError(''); }}
+              placeholder={t('auth.emailPlaceholder')}
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="send"
+              onSubmitEditing={sendOTP}
+            />
+
+            {error ? <Text style={s.errTxt}>{error}</Text> : null}
+
+            {/* Basla button */}
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={sendOTP}
+              disabled={!email.trim() || loading}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={colors.goldGradient as [string, string]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[s.primaryBtnGrad, (!email.trim() || loading) && { opacity: 0.5 }]}
               >
                 {loading
-                  ? <ActivityIndicator color="#9B8AB8" size="small" />
-                  : <Text style={[s.demoTxt, { color: colors.textSecondary }]}>{t('auth.demoLogin')}</Text>
+                  ? <ActivityIndicator color="#1a0f00" size="small" />
+                  : <Text style={s.primaryBtnTxt}>{t('auth.continueBtn')}</Text>
                 }
-              </TouchableOpacity>
-            </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Ghost button: Demo */}
+            <TouchableOpacity
+              style={s.ghostBtn}
+              onPress={demoLogin}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              {loading
+                ? <ActivityIndicator color="rgba(255,255,255,0.5)" size="small" />
+                : <Text style={s.ghostBtnTxt}>{t('auth.demoLogin')}</Text>
+              }
+            </TouchableOpacity>
+
+            {/* Legal text */}
+            <Text style={s.legalTxt}>{t('auth.emailHint')}</Text>
           </Animated.View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1 },
-  container: { flex: 1 },
-  kav: { flex: 1, justifyContent: 'center' },
-  inner: { paddingHorizontal: 24 },
-  top: { alignItems: 'center', marginBottom: 36 },
-  logo: { fontSize: 56, fontWeight: '800', color: '#2D1B4E', letterSpacing: -2 },
-  logoAccent: { color: '#FF6B9D' },
-  sparkle: { fontSize: 28, marginTop: 4 },
-  tagline: { fontSize: 16, color: '#9B8AB8', marginTop: 8, fontWeight: '600' },
-  card: { backgroundColor: '#fff', borderRadius: 28, padding: 28, gap: 14, shadowColor: '#C084FC', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 24, elevation: 8 },
-  cardTitle: { fontSize: 28, fontWeight: '800', color: '#2D1B4E', letterSpacing: -0.5 },
-  cardSub: { fontSize: 15, color: '#8B7AA0', lineHeight: 22 },
-  bold: { fontWeight: '700', color: '#2D1B4E' },
-  cardLabel: { fontSize: 14, color: '#9B8AB8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: {
-    backgroundColor: '#F8F5FC', borderRadius: 18, paddingHorizontal: 18,
-    paddingVertical: 16, fontSize: 17, color: '#2D1B4E', fontWeight: '500',
-    borderWidth: 2, borderColor: '#F0EBF7',
+  bg: {
+    flex: 1,
+    backgroundColor: '#0D0D14',
   },
-  inputErr: { borderColor: '#FF6B9D' },
-  otpRow: { flexDirection: 'row', justifyContent: 'center', gap: 7, marginVertical: 4 },
+  container: {
+    flex: 1,
+  },
+  kav: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  kavOtp: {
+    flex: 1,
+  },
+
+  // ── Center area (logo) ──
+  centerArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoWrap: {
+    marginBottom: 20,
+    // Gold glow shadow
+    shadowColor: '#E8B86D',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.4,
+    shadowRadius: 60,
+    elevation: 20,
+  },
+  logoMark: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandName: {
+    fontFamily: FONT_HEADING,
+    fontSize: 38,
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  tagline: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.4)',
+    marginTop: 6,
+  },
+
+  // ── Bottom area (inputs) ──
+  bottomArea: {
+    paddingHorizontal: 24,
+    paddingBottom: 52,
+    gap: 12,
+  },
+  emailInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    height: 52,
+    paddingHorizontal: 18,
+    fontSize: 16,
+    color: '#ffffff',
+    fontFamily: FONT_BODY_SEMIBOLD,
+  },
+  emailInputErr: {
+    borderColor: '#ff4444',
+  },
+  primaryBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  primaryBtnGrad: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnTxt: {
+    color: '#1a0f00',
+    fontSize: 16,
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontWeight: '600',
+  },
+  ghostBtn: {
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ghostBtnTxt: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    fontFamily: FONT_BODY_SEMIBOLD,
+  },
+  legalTxt: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.2)',
+    textAlign: 'center',
+    lineHeight: 16,
+    marginTop: 4,
+  },
+
+  // ── OTP View ──
+  backBtn: {
+    marginTop: Platform.OS === 'ios' ? 8 : 16,
+    marginLeft: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    paddingBottom: 60,
+  },
+  otpTitle: {
+    fontFamily: FONT_HEADING,
+    fontSize: 32,
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  otpSubtitle: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.5)',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 24,
+  },
   otpBox: {
-    width: 40, height: 52, borderRadius: 16, borderWidth: 2, borderColor: '#F0EBF7',
-    backgroundColor: '#F8F5FC', alignItems: 'center', justifyContent: 'center',
+    width: 48,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  otpBoxFilled: { borderColor: '#C084FC', backgroundColor: '#F5F0FF' },
-  otpBoxErr: { borderColor: '#FF6B9D' },
-  otpDigit: { fontSize: 24, fontWeight: '800', color: '#C4B5D0' },
-  otpDigitFilled: { color: '#7C3AED' },
-  otpHidden: { position: 'absolute', opacity: 0, height: 1, width: 1 },
-  errTxt: { fontSize: 13, color: '#FF6B9D', textAlign: 'center', fontWeight: '600' },
-  btn: { borderRadius: 20, overflow: 'hidden' },
-  btnOff: { opacity: 0.6 },
-  btnGrad: { padding: 18, alignItems: 'center', borderRadius: 20 },
-  btnTxt: { color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.3 },
-  hint: { fontSize: 14, color: '#B8A8CC', textAlign: 'center', lineHeight: 20 },
-  retryRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  retryBtn: { padding: 6 },
-  retryDot: { color: '#D4C8E0', fontSize: 16 },
-  retryTxt: { fontSize: 14, color: '#9B8AB8', fontWeight: '600' },
-  demoBtn: { alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F0EBF7', marginTop: 4 },
-  demoTxt: { fontSize: 14, color: '#9B8AB8', fontWeight: '600' },
+  otpBoxFilled: {
+    borderColor: '#E8B86D',
+    backgroundColor: 'rgba(232, 184, 109, 0.08)',
+  },
+  otpBoxActive: {
+    borderColor: 'rgba(232, 184, 109, 0.5)',
+  },
+  otpBoxErr: {
+    borderColor: '#ff4444',
+  },
+  otpDigit: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.2)',
+  },
+  otpDigitFilled: {
+    color: '#E8B86D',
+  },
+  otpHidden: {
+    position: 'absolute',
+    opacity: 0,
+    height: 1,
+    width: 1,
+  },
+  errTxt: {
+    fontSize: 13,
+    color: '#ff4444',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  verifyBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  verifyBtnGrad: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBtnTxt: {
+    color: '#1a0f00',
+    fontSize: 16,
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontWeight: '600',
+  },
+  btnDisabled: {
+    opacity: 0.6,
+  },
+  resendBtn: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  resendTxt: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontFamily: FONT_BODY_SEMIBOLD,
+  },
 });

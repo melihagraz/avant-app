@@ -408,7 +408,7 @@ const s = StyleSheet.create({
     right: 20,
     borderRadius: 28,
     overflow: 'hidden',
-    shadowColor: '#FF6B9D',
+    shadowColor: '#E8B86D',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 16,

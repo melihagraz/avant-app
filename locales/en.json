@@ -104,9 +104,56 @@
     "galleryPermission": "Gallery access is needed to select photos."
   },
 
+  "tabs": {
+    "discover": "Discover",
+    "chat": "Chat",
+    "profile": "Profile"
+  },
+
+  "splash": {
+    "start": "Get Started",
+    "haveAccount": "I already have an account",
+    "tagline": "Your AI finds the connection",
+    "legal": "By continuing you agree to the Terms of Service"
+  },
+
+  "agentMatch": {
+    "title": "Agent Match",
+    "premium": "PREMIUM",
+    "score": "Compatibility Score",
+    "startChat": "Start Chat",
+    "goBack": "Go Back",
+    "insights": "Agent Insights",
+    "conversation": "Agent conversation",
+    "yourAgent": "YOUR AGENT",
+    "theirAgent": "THEIR AGENT"
+  },
+
+  "filter": {
+    "title": "Filters",
+    "reset": "Reset",
+    "apply": "Apply",
+    "discovery": "Discovery Settings",
+    "preferences": "Preferences",
+    "advanced": "Advanced",
+    "distance": "Distance",
+    "ageRange": "Age Range",
+    "gender": "Gender",
+    "intent": "Relationship intent",
+    "verifiedOnly": "Verified profiles",
+    "premiumLocked": "Premium required"
+  },
+
+  "chatAgent": {
+    "title": "Agent Assistant",
+    "loading": "Preparing suggestions...",
+    "tip": "Suggestions based on your conversation",
+    "error": "Couldn't load suggestions"
+  },
+
   "auth": {
     "logo": "avant",
-    "tagline": "your agent meets first",
+    "tagline": "Your AI finds the connection",
     "emailLabel": "Your email",
     "emailPlaceholder": "example@email.com",
     "emailHint": "We'll send an 8-digit verification code to your email 💌",

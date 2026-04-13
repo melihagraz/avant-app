@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
   ScrollView, Image, ActivityIndicator, Alert, Linking, Platform, Switch, Animated, Pressable,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,10 +20,14 @@ import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
+import { FONT_HEADING, FONT_BODY_SEMIBOLD } from '../lib/fonts';
 
 const PREMIUM_PRODUCT_ID = 'com.avant.dating.premium.monthly.v1';
 
 const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HERO_HEIGHT = 300;
 
 interface UserProfile {
   id: string;
@@ -34,6 +39,14 @@ interface UserProfile {
   photos: string[];
   is_premium?: boolean;
   notifications_enabled?: boolean;
+  job?: string;
+  education?: string;
+  religion?: string;
+  personality?: string;
+  tags?: string[];
+  smoking?: string;
+  dating_intention?: string;
+  family_plans?: string;
 }
 
 export default function ProfileScreen({ navigation }: any) {
@@ -310,144 +323,240 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
+  // ---------- Profile strength calculation ----------
+  const computeProfileStrength = (): number => {
+    if (!profile) return 0;
+    let filled = 0;
+    const total = 8;
+    if (profile.photos?.length) filled++;
+    if (profile.name) filled++;
+    if (profile.city) filled++;
+    if (profile.job) filled++;
+    if (profile.education) filled++;
+    if (profile.personality) filled++;
+    if (profile.relationship_type) filled++;
+    if (profile.tags?.length) filled++;
+    return Math.round((filled / total) * 100);
+  };
+
+  // ---------- Loading state ----------
   if (loading) {
     return (
-      <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
+      <View style={s.bg}>
         <SafeAreaView style={s.safeArea}>
-          <View style={s.loadingWrap}><ActivityIndicator color={colors.accentPink} size="large" /></View>
+          <View style={s.loadingWrap}>
+            <ActivityIndicator color={colors.accentGold} size="large" />
+          </View>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
+  // ---------- Error / no profile state ----------
   if (!profile) {
     return (
-      <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
+      <View style={s.bg}>
         <SafeAreaView style={s.safeArea}>
           <View style={s.loadingWrap}>
             <Text style={{ color: colors.textSecondary }}>{t('profile.loadFailed')}</Text>
             <TouchableOpacity onPress={fetchProfile} style={{ marginTop: 16 }}>
-              <Text style={{ color: colors.accentPink, fontWeight: '700' }}>{t('common.retry')}</Text>
+              <Text style={{ color: colors.accentGold, fontWeight: '700' }}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
+  const profileStrength = computeProfileStrength();
+  const circumference = 2 * Math.PI * 28; // r=28
+  const strokeDashoffset = circumference - (circumference * profileStrength) / 100;
+
+  const interests = profile.tags?.length ? profile.tags : (profile.job ? [profile.job] : []);
+
+  const basicInfo: { label: string; value: string }[] = [
+    { label: t('profile.labelAge'), value: String(profile.age) },
+    { label: t('profile.labelCity'), value: profile.city },
+    ...(profile.job ? [{ label: t('profile.labelJob') || 'Meslek', value: profile.job }] : []),
+    ...(profile.education ? [{ label: t('profile.labelEducation') || 'Egitim', value: profile.education }] : []),
+    ...(profile.relationship_type ? [{ label: t('profile.labelSeeking'), value: relationshipLabel(profile.relationship_type) }] : []),
+    ...(profile.religion ? [{ label: t('profile.labelReligion') || 'Din', value: profile.religion }] : []),
+  ];
+
+  // ---------- RENDER ----------
   return (
-    <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
-      <SafeAreaView style={s.safeArea}>
-        {/* Menu header: back + title + sign out */}
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Text style={[s.back, { color: colors.textSecondary }]}>‹</Text>
-          </TouchableOpacity>
-          <Text style={[s.title, { color: colors.textPrimary }]}>Menu</Text>
-          <TouchableOpacity onPress={signOut} style={s.signOutBtn}>
-            <Text style={[s.signOut, { color: colors.accentPink }]}>{t('profile.signOut')}</Text>
-          </TouchableOpacity>
-        </View>
+    <View style={s.bg}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ===== HERO SECTION ===== */}
+        <View style={s.heroContainer}>
+          <LinearGradient
+            colors={['#3d2a4a', '#1a1228'] as any}
+            start={{ x: 0.2, y: 0 }}
+            end={{ x: 0.8, y: 1 }}
+            style={s.heroGradient}
+          />
 
-        <ScrollView contentContainerStyle={s.scroll}>
-          {/* Centered avatar + verified + view profile */}
-          <View style={s.avatarSection}>
-            <TouchableOpacity style={s.avatarWrap} onPress={pickImage} disabled={uploading}>
-              <LinearGradient colors={colors.accentGradient as any} style={s.avatarRing}>
-                {profile.photos?.[0] ? (
-                  <Image source={{ uri: profile.photos[0] }} style={s.avatarImg} />
-                ) : (
-                  <View style={[s.avatarPlaceholder, { backgroundColor: colors.card }]}>
-                    <Text style={[s.avatarInitial, { color: colors.accentPink }]}>
-                      {profile.name?.[0]?.toUpperCase() || 'M'}
-                    </Text>
-                  </View>
-                )}
-              </LinearGradient>
-              {uploading && (
-                <View style={s.avatarUploading}>
-                  <ActivityIndicator color="#fff" size="small" />
-                </View>
-              )}
+          {/* Bottom fade overlay */}
+          <LinearGradient
+            colors={['transparent', '#0D0D14'] as any}
+            style={s.heroFade}
+          />
+
+          {/* Edit button (top right) */}
+          <SafeAreaView style={s.heroTopBar}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              style={s.editPill}
+              onPress={pickImage}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={16} color="#fff" />
+              <Text style={s.editPillText}>Duzenle</Text>
             </TouchableOpacity>
+          </SafeAreaView>
 
-            <View style={s.nameRow}>
-              <Text style={[s.avatarName, { color: colors.textPrimary }]}>{profile.name}</Text>
-              <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />
-            </View>
+          {/* Profile photo */}
+          <TouchableOpacity
+            style={s.heroAvatarWrap}
+            onPress={pickImage}
+            disabled={uploading}
+            activeOpacity={0.8}
+          >
+            {profile.photos?.[0] ? (
+              <Image source={{ uri: profile.photos[0] }} style={s.heroAvatar} />
+            ) : (
+              <View style={s.heroAvatarPlaceholder}>
+                <Ionicons name="person" size={54} color="rgba(255,255,255,0.25)" />
+              </View>
+            )}
+            {uploading && (
+              <View style={s.heroAvatarUploading}>
+                <ActivityIndicator color="#fff" size="small" />
+              </View>
+            )}
+          </TouchableOpacity>
 
-            <TouchableOpacity onPress={pickImage}>
-              <Text style={[s.viewProfileLink, { color: colors.textSecondary }]}>
-                View profile
-              </Text>
-            </TouchableOpacity>
-
+          {/* Name + age */}
+          <View style={s.heroNameWrap}>
+            <Text style={s.heroName}>
+              {profile.name}, {profile.age}
+            </Text>
             {profile.is_premium && (
-              <View style={s.premiumActivePill}>
-                <Ionicons name="star" size={12} color="#fff" />
-                <Text style={s.premiumActiveText}>{t('profile.premiumActive')}</Text>
+              <View style={s.premiumBadgeInline}>
+                <Ionicons name="star" size={11} color="#fff" />
               </View>
             )}
           </View>
 
-          {/* Gold Premium Card (Muzz-style) */}
+          {/* City + job subtitle */}
+          {(profile.city || profile.job) && (
+            <Text style={s.heroSubtitle}>
+              {[profile.city, profile.job].filter(Boolean).join(' \u2022 ')}
+            </Text>
+          )}
+        </View>
+
+        {/* ===== CONTENT AREA ===== */}
+        <View style={s.content}>
+
+          {/* ===== PROFILE STRENGTH CARD ===== */}
+          <View style={s.strengthCard}>
+            <View style={s.strengthLeft}>
+              <Text style={s.strengthLabel}>PROFIL GUCU</Text>
+              <Text style={s.strengthValue}>{profileStrength}%</Text>
+            </View>
+            <View style={s.strengthRight}>
+              {/* SVG-like circular progress using nested Views */}
+              <View style={s.ringOuter}>
+                <View style={s.ringTrack} />
+                {/* We simulate the arc with a conic approach using a bordered view */}
+                <View style={[s.ringCenter]}>
+                  <Text style={s.ringText}>{profileStrength}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* ===== HAKKIMDA ===== */}
+          {profile.personality ? (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>HAKKIMDA</Text>
+              <Text style={s.bioText}>{profile.personality}</Text>
+            </View>
+          ) : null}
+
+          {/* ===== ILGI ALANLARI ===== */}
+          {interests.length > 0 && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>ILGI ALANLARI</Text>
+              <View style={s.tagsWrap}>
+                {interests.map((tag, i) => (
+                  <View key={i} style={s.tag}>
+                    <Text style={s.tagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ===== TEMEL BILGILER ===== */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>TEMEL BILGILER</Text>
+            <View style={s.infoGrid}>
+              {basicInfo.map((item, i) => (
+                <View key={i} style={s.infoCell}>
+                  <Text style={s.infoCellLabel}>{item.label}</Text>
+                  <Text style={s.infoCellValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* ===== PREMIUM CARD (non-premium users) ===== */}
           {!profile.is_premium && (
-            <View style={s.goldCard}>
+            <View style={s.premiumCard}>
               <LinearGradient
-                colors={['#F5E7B3', '#E5C84F', '#B8860B']}
+                colors={colors.goldGradient as any}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={s.goldGrad}
+                style={s.premiumGrad}
               >
-                <View style={s.goldTopRow}>
-                  <View style={s.goldDashes}>
-                    <View style={s.goldDash} />
-                    <View style={[s.goldDash, { backgroundColor: '#8B6914' }]} />
-                    <View style={s.goldDash} />
-                    <View style={s.goldDash} />
-                  </View>
-                  <Ionicons name="chatbubble-ellipses-outline" size={40} color="#8B6914" style={{ opacity: 0.6 }} />
+                <View style={s.premiumHeader}>
+                  <Ionicons name="diamond-outline" size={28} color="#fff" />
+                  <Text style={s.premiumTitle}>{t('profile.premiumTitle')}</Text>
                 </View>
+                <Text style={s.premiumDesc}>{t('profile.premiumDesc')}</Text>
 
-                <Text style={s.goldTitle}>{t('profile.premiumTitle')}</Text>
-                <Text style={s.goldDesc}>{t('profile.premiumDesc')}</Text>
-
-                <Animated.View style={{ transform: [{ scale: premiumBtnScale }], width: '100%', alignItems: 'center', marginTop: 14 }}>
+                <Animated.View style={{ transform: [{ scale: premiumBtnScale }], width: '100%', marginTop: 16 }}>
                   <Pressable
-                    style={s.goldCtaBtn}
+                    style={s.premiumBtn}
                     onPress={handlePurchase}
                     onPressIn={onPremiumPressIn}
                     onPressOut={onPremiumPressOut}
                     disabled={purchasing}
                   >
-                    <LinearGradient
-                      colors={['#B8860B', '#8B6914']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={s.goldCtaGrad}
-                    >
-                      {purchasing ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <>
-                          <Text style={s.goldCtaText}>{t('profile.premiumSubscribe')}</Text>
-                          <Ionicons name="star" size={16} color="#fff" />
-                        </>
-                      )}
-                    </LinearGradient>
+                    {purchasing ? (
+                      <ActivityIndicator color="#E8B86D" size="small" />
+                    ) : (
+                      <Text style={s.premiumBtnText}>{t('profile.premiumSubscribe')}</Text>
+                    )}
                   </Pressable>
                 </Animated.View>
 
-                <Text style={s.goldPrice}>{t('profile.premiumPrice')}</Text>
-                <Text style={s.goldLegal} numberOfLines={3}>
+                <Text style={s.premiumPrice}>{t('profile.premiumPrice')}</Text>
+                <Text style={s.premiumLegal} numberOfLines={3}>
                   {t('profile.premiumLegal')}
                 </Text>
                 <View style={s.premiumLinks}>
-                  <Text style={[s.premiumLink, { color: '#8B6914' }]} onPress={() => Linking.openURL('https://melihagraz.github.io/avant-app')}>
+                  <Text style={s.premiumLink} onPress={() => Linking.openURL('https://melihagraz.github.io/avant-app')}>
                     {t('profile.privacyPolicy')}
                   </Text>
-                  <Text style={[s.premiumLinkSep, { color: '#8B6914' }]}>·</Text>
-                  <Text style={[s.premiumLink, { color: '#8B6914' }]} onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
+                  <Text style={s.premiumLinkSep}>{'\u00B7'}</Text>
+                  <Text style={s.premiumLink} onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
                     {t('profile.termsOfService')}
                   </Text>
                 </View>
@@ -455,57 +564,15 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           )}
 
-          {/* Stats cards row */}
-          <View style={s.statsRow}>
-            <View style={[s.statCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-              <Text style={[s.statNumber, { color: colors.textPrimary }]}>15</Text>
-              <Text style={[s.statLabel, { color: colors.textSecondary }]}>Daily likes</Text>
-            </View>
-            <View style={[s.statCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-              <Text style={[s.statNumber, { color: colors.textPrimary }]}>1</Text>
-              <Text style={[s.statLabel, { color: colors.textSecondary }]}>Super likes</Text>
-            </View>
-          </View>
-
-          {(profile.photos?.length || 0) > 0 && (
-            <View style={s.photoGrid}>
-              {profile.photos?.map((photo, i) => (
-                <View key={i} style={s.photoThumb}>
-                  <Image source={{ uri: photo }} style={s.thumbImg} />
-                  <TouchableOpacity style={s.deleteBtn} onPress={() => deletePhoto(photo)} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.deleteBtnTxt}>×</Text>}
-                  </TouchableOpacity>
-                  {i === 0 && (
-                    <LinearGradient colors={colors.accentGradientAlt as any} style={s.mainBadge}>
-                      <Text style={s.mainBadgeTxt}>{t('profile.main')}</Text>
-                    </LinearGradient>
-                  )}
+          {/* ===== SETTINGS GROUP ===== */}
+          <View style={s.settingsGroup}>
+            {/* Notifications toggle */}
+            <View style={s.settingsRow}>
+              <View style={s.settingsRowLeft}>
+                <View style={[s.settingsIcon, { backgroundColor: 'rgba(160,100,255,0.12)' }]}>
+                  <Ionicons name="notifications-outline" size={18} color={colors.accentPurple} />
                 </View>
-              ))}
-            </View>
-          )}
-
-          <View style={[s.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-            <Text style={[s.cardTitle, { color: colors.textSecondary }]}>{t('profile.profileInfo')}</Text>
-            {[
-              { label: t('profile.labelName'), value: profile.name },
-              { label: t('profile.labelAge'), value: String(profile.age) },
-              { label: t('profile.labelCity'), value: profile.city },
-              { label: t('profile.labelSeeking'), value: relationshipLabel(profile.relationship_type || '') },
-            ].map((row, i, arr) => (
-              <View key={row.label} style={[s.row, { borderBottomColor: colors.separator }, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
-                <Text style={[s.rowLabel, { color: colors.textSecondary }]}>{row.label}</Text>
-                <Text style={[s.rowValue, { color: colors.textPrimary }]}>{row.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={[s.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-            <Text style={[s.cardTitle, { color: colors.textSecondary }]}>{t('profile.notificationsTitle')}</Text>
-            <View style={[s.notifRow, { borderBottomWidth: 0 }]}>
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[s.rowValue, { color: colors.textPrimary }]}>{t('profile.notificationsEnabled')}</Text>
-                <Text style={[s.rowLabel, { color: colors.textSecondary, marginTop: 2 }]}>{t('profile.notificationsDesc')}</Text>
+                <Text style={s.settingsRowText}>{t('profile.notificationsEnabled')}</Text>
               </View>
               <Switch
                 value={profile.notifications_enabled !== false}
@@ -514,252 +581,435 @@ export default function ProfileScreen({ navigation }: any) {
                 thumbColor={colors.white}
               />
             </View>
-          </View>
 
-          <View style={[s.agentCard, { backgroundColor: colors.card }]}>
-            <View style={s.agentDotWrap}>
-              <View style={s.agentDot} />
-            </View>
-            <View>
-              <Text style={[s.agentTitle, { color: colors.textPrimary }]}>{t('profile.agentActive')}</Text>
-              <Text style={[s.agentSub, { color: colors.textSecondary }]}>{t('profile.agentActiveSub')}</Text>
-            </View>
-          </View>
+            <View style={s.settingsSep} />
 
-          <TouchableOpacity
-            style={[s.supportBtn, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
-            onPress={() => Linking.openURL('mailto:melihagraz@gmail.com?subject=Avant%20Destek%20Talebi')}
-            activeOpacity={0.7}
-          >
-            <Text style={s.supportIcon}>💬</Text>
-            <Text style={[s.supportTxt, { color: colors.userBubble }]}>{t('profile.support')}</Text>
-          </TouchableOpacity>
+            {/* Support */}
+            <TouchableOpacity
+              style={s.settingsRow}
+              onPress={() => Linking.openURL('mailto:melihagraz@gmail.com?subject=Avant%20Destek%20Talebi')}
+              activeOpacity={0.6}
+            >
+              <View style={s.settingsRowLeft}>
+                <View style={[s.settingsIcon, { backgroundColor: 'rgba(232,184,109,0.12)' }]}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accentGold} />
+                </View>
+                <Text style={s.settingsRowText}>{t('profile.support')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
+            </TouchableOpacity>
 
-          <View style={s.dangerZone}>
-            <TouchableOpacity style={s.deleteAccountBtn} onPress={deleteAccount} disabled={deleting}>
-              {deleting
-                ? <ActivityIndicator color="#FF6B9D" size="small" />
-                : <Text style={[s.deleteAccountTxt, { color: colors.accentPink }]}>{t('profile.deleteAccount')}</Text>
-              }
+            <View style={s.settingsSep} />
+
+            {/* Sign out */}
+            <TouchableOpacity
+              style={s.settingsRow}
+              onPress={signOut}
+              activeOpacity={0.6}
+            >
+              <View style={s.settingsRowLeft}>
+                <View style={[s.settingsIcon, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+                  <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
+                </View>
+                <Text style={s.settingsRowText}>{t('profile.signOut')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
+            </TouchableOpacity>
+
+            <View style={s.settingsSep} />
+
+            {/* Delete account */}
+            <TouchableOpacity
+              style={s.settingsRow}
+              onPress={deleteAccount}
+              disabled={deleting}
+              activeOpacity={0.6}
+            >
+              <View style={s.settingsRowLeft}>
+                <View style={[s.settingsIcon, { backgroundColor: 'rgba(255,68,68,0.1)' }]}>
+                  {deleting ? (
+                    <ActivityIndicator color="#ff4444" size="small" />
+                  ) : (
+                    <Ionicons name="trash-outline" size={18} color="#ff4444" />
+                  )}
+                </View>
+                <Text style={[s.settingsRowText, { color: '#ff4444' }]}>{t('profile.deleteAccount')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1 },
-  safeArea: { flex: 1 },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10 },
-  backBtn: { padding: 12 },
-  back: { fontSize: 30, color: '#9B8AB8', fontWeight: '300' },
-  title: { fontSize: 20, fontWeight: '800', color: '#2D1B4E' },
-  signOutBtn: { padding: 12 },
-  signOut: { fontSize: 14, color: '#FF6B9D', fontWeight: '700' },
-  scroll: { padding: 18, gap: 18, paddingBottom: 48 },
-  avatarSection: { alignItems: 'center', gap: 8, paddingVertical: 8 },
-  avatarWrap: { position: 'relative' },
-  avatarRing: { width: 128, height: 128, borderRadius: 64, alignItems: 'center', justifyContent: 'center', padding: 4 },
-  avatarImg: { width: 120, height: 120, borderRadius: 60 },
-  avatarPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { fontSize: 48, fontWeight: '800', color: '#FF6B9D' },
-  avatarAddBtn: { position: 'absolute', bottom: 2, right: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: '#7C3AED', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#F8F5FF' },
-  avatarAddIcon: { color: '#fff', fontSize: 22, fontWeight: '400', lineHeight: 24 },
-  avatarName: { fontSize: 28, fontWeight: '800', color: '#2D1B4E', marginTop: 4 },
-  avatarSub: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
-  // Menu redesign styles
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 14,
+  // ---------- Base ----------
+  bg: {
+    flex: 1,
+    backgroundColor: '#0D0D14',
   },
-  viewProfileLink: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 4,
-    textDecorationLine: 'underline',
+  safeArea: {
+    flex: 1,
   },
-  avatarUploading: {
-    position: 'absolute',
-    inset: 0,
+  loadingWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 64,
   },
-  premiumActivePill: {
+
+  // ---------- Hero ----------
+  heroContainer: {
+    width: SCREEN_WIDTH,
+    height: HERO_HEIGHT,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 24,
+  },
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroFade: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  heroTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    zIndex: 10,
+  },
+  editPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: '#10B981',
-    marginTop: 10,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    // backdrop-blur simulated with bg opacity
   },
-  premiumActiveText: {
-    fontSize: 12,
-    fontWeight: '800',
+  editPillText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 13,
     color: '#fff',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+  },
+  heroAvatarWrap: {
+    position: 'relative',
+    marginBottom: 14,
+    zIndex: 5,
+  },
+  heroAvatar: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  heroAvatarPlaceholder: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  heroAvatarUploading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 55,
+  },
+  heroNameWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 5,
+  },
+  heroName: {
+    fontFamily: FONT_HEADING,
+    fontSize: 30,
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  premiumBadgeInline: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E8B86D',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSubtitle: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 4,
+    zIndex: 5,
   },
 
-  // Gold card (Muzz-style premium)
-  goldCard: {
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#B8860B',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.35,
-    shadowRadius: 28,
-    elevation: 12,
-    marginBottom: 4,
+  // ---------- Content area ----------
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 20,
   },
-  goldGrad: {
-    padding: 28,
-    borderRadius: 28,
-    alignItems: 'center',
-  },
-  goldTopRow: {
+
+  // ---------- Profile Strength Card ----------
+  strengthCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 12,
+    backgroundColor: 'rgba(232,184,109,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,184,109,0.2)',
+    borderRadius: 18,
+    padding: 20,
   },
-  goldDashes: {
-    flexDirection: 'row',
-    gap: 6,
+  strengthLeft: {
+    flex: 1,
   },
-  goldDash: {
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(139,105,20,0.4)',
+  strengthLabel: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 11,
+    color: 'rgba(232,184,109,0.7)',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
-  goldTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#5C4408',
+  strengthValue: {
+    fontFamily: FONT_HEADING,
+    fontSize: 32,
+    color: '#E8B86D',
     letterSpacing: -0.5,
-    textAlign: 'center',
   },
-  goldDesc: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(92,68,8,0.75)',
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
-  },
-  goldCtaBtn: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  goldCtaGrad: {
-    flexDirection: 'row',
+  strengthRight: {
+    width: 66,
+    height: 66,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 18,
-    borderRadius: 32,
   },
-  goldCtaText: {
+  ringOuter: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 4,
+    borderColor: 'rgba(232,184,109,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  ringTrack: {
+    position: 'absolute',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+  },
+  ringCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
     fontSize: 16,
-    fontWeight: '900',
+    color: '#E8B86D',
+  },
+
+  // ---------- Section ----------
+  section: {
+    gap: 10,
+  },
+  sectionTitle: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  bioText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 22,
+  },
+
+  // ---------- Tags ----------
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  tagText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  // ---------- Info Grid ----------
+  infoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  infoCell: {
+    width: (SCREEN_WIDTH - 40 - 10) / 2, // 2 columns with gap
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  infoCellLabel: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  infoCellValue: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 14,
     color: '#fff',
+  },
+
+  // ---------- Premium Card ----------
+  premiumCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#E8B86D',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  premiumGrad: {
+    padding: 24,
+    borderRadius: 22,
+    alignItems: 'center',
+  },
+  premiumHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  premiumTitle: {
+    fontFamily: FONT_HEADING,
+    fontSize: 22,
+    color: '#fff',
+    letterSpacing: -0.3,
+  },
+  premiumDesc: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  premiumBtn: {
+    backgroundColor: '#fff',
+    borderRadius: 28,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  premiumBtnText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 15,
+    color: '#B8860B',
     letterSpacing: 0.3,
   },
-  goldPrice: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#5C4408',
+  premiumPrice: {
+    fontFamily: FONT_HEADING,
+    fontSize: 26,
+    color: '#fff',
     marginTop: 12,
-    letterSpacing: -0.8,
+    letterSpacing: -0.5,
   },
-  goldLegal: {
+  premiumLegal: {
     fontSize: 10,
-    color: 'rgba(92,68,8,0.65)',
+    color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
     lineHeight: 14,
-    marginTop: 10,
+    marginTop: 8,
     paddingHorizontal: 4,
   },
-
-  // Stats cards
-  statsRow: {
+  premiumLinks: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 22,
-    padding: 20,
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
+    gap: 8,
+    marginTop: 8,
   },
-  statNumber: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -1,
+  premiumLink: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
-  statLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
+  premiumLinkSep: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
   },
 
-  premiumCard: {
-    borderRadius: 32, overflow: 'hidden',
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 14,
+  // ---------- Settings Group ----------
+  settingsGroup: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  premiumGrad: { alignItems: 'center', padding: 32, borderRadius: 32 },
-  premiumIcon: { fontSize: 36, marginBottom: 8 },
-  premiumTitle: { fontSize: 26, fontWeight: '900', color: '#fff', marginBottom: 6, letterSpacing: -0.5 },
-  premiumDesc: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
-  premiumPrice: { fontSize: 36, fontWeight: '900', color: '#fff', marginBottom: 4, letterSpacing: -1 },
-  premiumDuration: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '500', marginBottom: 8 },
-  premiumBuyBtn: {
-    backgroundColor: '#fff', borderRadius: 28, paddingVertical: 18, paddingHorizontal: 56, marginBottom: 18, marginTop: 4,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8,
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  premiumBuyTxt: { fontSize: 16, fontWeight: '800', color: '#C084FC', letterSpacing: 0.3 },
-  premiumLegal: { fontSize: 11, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 16, marginBottom: 12, paddingHorizontal: 8 },
-  premiumLinks: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  premiumLink: { fontSize: 12, color: '#fff', fontWeight: '700', textDecorationLine: 'underline' },
-  premiumLinkSep: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photoThumb: { width: '30%', aspectRatio: 0.75, borderRadius: 18, overflow: 'hidden', position: 'relative' },
-  thumbImg: { width: '100%', height: '100%' },
-  deleteBtn: { position: 'absolute', top: 6, right: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  deleteBtnTxt: { color: '#fff', fontSize: 16, lineHeight: 20 },
-  mainBadge: { position: 'absolute', bottom: 6, left: 6, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  mainBadgeTxt: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  card: { backgroundColor: '#fff', borderRadius: 22, padding: 18, shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 16, elevation: 3 },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: '#9B8AB8', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F5F0FA' },
-  rowLabel: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
-  rowValue: { fontSize: 15, color: '#2D1B4E', fontWeight: '700' },
-  notifRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
-  agentCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 22, padding: 18, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2 },
-  agentDotWrap: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center' },
-  agentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  agentTitle: { fontSize: 16, fontWeight: '800', color: '#2D1B4E' },
-  agentSub: { fontSize: 13, color: '#9B8AB8', marginTop: 2, fontWeight: '500' },
-  supportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 22, padding: 16, shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
-  supportIcon: { fontSize: 18 },
-  supportTxt: { fontSize: 15, color: '#7C3AED', fontWeight: '700' },
-  dangerZone: { alignItems: 'center', paddingTop: 8 },
-  deleteAccountBtn: { paddingVertical: 16, paddingHorizontal: 28 },
-  deleteAccountTxt: { fontSize: 14, color: '#FF6B9D', fontWeight: '600' },
+  settingsRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  settingsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsRowText: {
+    fontFamily: FONT_BODY_SEMIBOLD,
+    fontSize: 14,
+    color: '#fff',
+  },
+  settingsSep: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginHorizontal: 16,
+  },
 });

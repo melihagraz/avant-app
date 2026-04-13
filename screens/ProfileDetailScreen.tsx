@@ -294,7 +294,7 @@ const s = StyleSheet.create({
 
   scoreBadge: {
     position: 'absolute', top: 16, right: 16, borderRadius: 28, overflow: 'hidden',
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
+    shadowColor: '#E8B86D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
   },
   scoreBadgeInner: {
     paddingHorizontal: 18, paddingVertical: 12, alignItems: 'center', borderRadius: 28,
@@ -342,7 +342,7 @@ const s = StyleSheet.create({
   },
   chatBtn: {
     flex: 1, borderRadius: 31, overflow: 'hidden',
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+    shadowColor: '#E8B86D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
   chatBtnGrad: {
     paddingVertical: 20, alignItems: 'center', borderRadius: 31,

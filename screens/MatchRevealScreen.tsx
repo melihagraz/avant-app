@@ -1,5 +1,4 @@
 // screens/MatchRevealScreen.tsx
-// Cinematic match reveal with reanimated animations + haptics
 import React, { useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Dimensions,
@@ -20,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
+import { FONT_HEADING, FONT_BODY_SEMIBOLD } from '../lib/fonts';
 import CompatibilityBars from '../components/CompatibilityBars';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -34,14 +34,13 @@ function hapticLight() {
 
 export default function MatchRevealScreen({ route, navigation }: any) {
   const { match } = route.params;
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
 
   const otherUser = match.other_user;
   const score = Math.round(((match.agent_a_score || 0) + (match.agent_b_score || 0)) / 2);
   const hasPhoto = otherUser?.photos?.length > 0;
 
-  // Shared animation values
   const blurOpacity = useSharedValue(0);
   const titleScale = useSharedValue(0.7);
   const titleOpacity = useSharedValue(0);
@@ -54,9 +53,7 @@ export default function MatchRevealScreen({ route, navigation }: any) {
   useEffect(() => {
     trackEvent('match_reveal_shown', { match_id: match.id, score });
 
-    // Animation sequence
     blurOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
-
     titleOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
     titleScale.value = withDelay(200, withSpring(1, { damping: 8, stiffness: 120 }));
 
@@ -68,11 +65,7 @@ export default function MatchRevealScreen({ route, navigation }: any) {
     );
     photoOpacity.value = withDelay(400, withTiming(1, { duration: 500 }));
 
-    scoreScale.value = withDelay(
-      700,
-      withSpring(1, { damping: 10, stiffness: 140 })
-    );
-
+    scoreScale.value = withDelay(700, withSpring(1, { damping: 10, stiffness: 140 }));
     barsOpacity.value = withDelay(900, withTiming(1, { duration: 500 }));
     buttonsOpacity.value = withDelay(1400, withTiming(1, { duration: 400 }));
   }, []);
@@ -110,14 +103,13 @@ export default function MatchRevealScreen({ route, navigation }: any) {
   return (
     <View style={s.wrap}>
       <Animated.View style={[StyleSheet.absoluteFillObject, blurStyle]}>
-        <BlurView intensity={isDark ? 95 : 80} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
+        <BlurView intensity={95} tint="dark" style={StyleSheet.absoluteFillObject} />
         <LinearGradient
-          colors={['rgba(5,6,15,0.6)', 'rgba(28,22,45,0.85)']}
+          colors={['rgba(61,42,15,0.4)', 'rgba(13,13,20,0.85)']}
           style={StyleSheet.absoluteFillObject}
         />
       </Animated.View>
 
-      {/* Close button */}
       <TouchableOpacity onPress={close} style={s.closeBtn}>
         <View style={s.closeBtnInner}>
           <Ionicons name="close" size={22} color="#fff" />
@@ -125,49 +117,36 @@ export default function MatchRevealScreen({ route, navigation }: any) {
       </TouchableOpacity>
 
       <View style={s.content}>
-        {/* Title */}
-        <Animated.View style={titleStyle}>
-          <LinearGradient
-            colors={colors.accentGradient as any}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={s.titleGrad}
-          >
-            <Text style={s.titleEmoji}>✨</Text>
-            <Text style={s.titleText}>{t('matchReveal.title')}</Text>
-            <Text style={s.titleEmoji}>✨</Text>
-          </LinearGradient>
-          <Text style={s.subtitleText}>{t('matchReveal.subtitle')}</Text>
-        </Animated.View>
-
-        {/* Photo */}
-        <Animated.View style={[s.photoWrap, photoStyle]}>
-          <LinearGradient
-            colors={colors.accentGradient as any}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={s.photoRing}
-          >
+        {/* Avatars pair */}
+        <Animated.View style={[s.avatarPair, photoStyle]}>
+          <View style={[s.matchAv, { zIndex: 2, marginRight: -18 }]}>
+            <Text style={s.matchAvText}>{'\u{1F9D4}'}</Text>
+          </View>
+          <Text style={s.sparkle}>{'\u2728'}</Text>
+          <View style={[s.matchAv, { marginLeft: -18 }]}>
             {hasPhoto ? (
-              <Image source={{ uri: otherUser.photos[0] }} style={s.photo} />
+              <Image source={{ uri: otherUser.photos[0] }} style={s.matchAvImg} />
             ) : (
-              <View style={[s.photo, s.photoPlaceholder]}>
-                <Text style={s.photoInitial}>{otherUser?.name?.[0]?.toUpperCase() || '?'}</Text>
-              </View>
+              <Text style={s.matchAvText}>{otherUser?.name?.[0] || '?'}</Text>
             )}
-          </LinearGradient>
-          <Text style={s.nameText}>{otherUser?.name}</Text>
+          </View>
         </Animated.View>
 
-        {/* Score */}
+        {/* Title */}
+        <Animated.View style={[s.titleWrap, titleStyle]}>
+          <Text style={s.matchTitle}>It's a Match!</Text>
+          <Text style={s.matchSub}>
+            Sen ve {otherUser?.name} birbirini begendi
+          </Text>
+        </Animated.View>
+
+        {/* AI hint box */}
         {score > 0 && (
-          <Animated.View style={scoreStyle}>
-            <LinearGradient
-              colors={colors.accentGradientAlt as any}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={s.scoreBadge}
-            >
-              <Text style={s.scoreNum}>{score}</Text>
-              <Text style={s.scoreLbl}>{t('matchReveal.compatibilityScore', { score: '' }).trim() || 'uyum'}</Text>
-            </LinearGradient>
+          <Animated.View style={[s.aiHint, scoreStyle]}>
+            <Text style={s.aiHintLabel}>{'\u{1F916}'} AGENT ANALIZI</Text>
+            <Text style={s.aiHintText}>
+              %{score} uyumluluk skoru. {match.agent_a_reasoning ? match.agent_a_reasoning.substring(0, 80) : 'Harika bir eslesme!'}
+            </Text>
           </Animated.View>
         )}
 
@@ -180,18 +159,19 @@ export default function MatchRevealScreen({ route, navigation }: any) {
 
         {/* Buttons */}
         <Animated.View style={[s.buttonsWrap, buttonsStyle]}>
-          <TouchableOpacity onPress={closeAndChat} style={s.primaryBtn} activeOpacity={0.85}>
+          <TouchableOpacity onPress={closeAndChat} activeOpacity={0.85}>
             <LinearGradient
-              colors={colors.accentGradientAlt as any}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={s.primaryBtnGrad}
+              colors={colors.goldGradient as any}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.primaryBtn}
             >
-              <Text style={s.primaryBtnTxt}>{t('matchReveal.sayHi')}</Text>
+              <Text style={s.primaryBtnTxt}>Mesaj Gonder {'\u2192'}</Text>
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={closeAndDetail} style={s.secondaryBtn} activeOpacity={0.85}>
-            <Text style={s.secondaryBtnTxt}>{t('matchReveal.viewProfile')}</Text>
+          <TouchableOpacity onPress={close} style={s.ghostBtn} activeOpacity={0.85}>
+            <Text style={s.ghostBtnTxt}>Kesfetmeye Devam</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -210,91 +190,121 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center', justifyContent: 'center',
   },
-
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 28,
+    paddingHorizontal: 24,
+    gap: 24,
   },
 
-  titleGrad: {
+  // Avatar pair
+  avatarPair: {
     flexDirection: 'row',
-    paddingHorizontal: 28, paddingVertical: 14,
-    borderRadius: 100,
-    alignItems: 'center', justifyContent: 'center', gap: 10,
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  titleEmoji: { fontSize: 22 },
-  titleText: {
-    fontSize: 26, fontWeight: '900', color: '#fff',
-    letterSpacing: 1.5,
+  matchAv: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#E8B86D',
+    backgroundColor: '#2a1f3d',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitleText: {
-    fontSize: 15, fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center', marginTop: 10,
+  matchAvText: {
+    fontSize: 40,
   },
-
-  photoWrap: { alignItems: 'center' },
-  photoRing: {
-    width: 180, height: 180, borderRadius: 90,
-    padding: 5,
-    shadowColor: '#C084FC', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.6, shadowRadius: 30, elevation: 16,
+  matchAvImg: {
+    width: 94,
+    height: 94,
+    borderRadius: 47,
   },
-  photo: {
-    width: 170, height: 170, borderRadius: 85,
-  },
-  photoPlaceholder: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  photoInitial: {
-    fontSize: 64, fontWeight: '900', color: '#fff',
-  },
-  nameText: {
-    fontSize: 28, fontWeight: '900', color: '#fff',
-    marginTop: 16, letterSpacing: -0.5,
+  sparkle: {
+    fontSize: 22,
+    zIndex: 3,
   },
 
-  scoreBadge: {
-    paddingHorizontal: 28, paddingVertical: 14,
-    borderRadius: 100,
-    flexDirection: 'row', alignItems: 'baseline', gap: 8,
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
+  // Title
+  titleWrap: {
+    alignItems: 'center',
   },
-  scoreNum: { fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  scoreLbl: { fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  matchTitle: {
+    fontFamily: FONT_HEADING,
+    fontSize: 40,
+    color: '#E8B86D',
+  },
+  matchSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 10,
+    lineHeight: 24,
+    textAlign: 'center',
+  },
 
+  // AI hint
+  aiHint: {
+    backgroundColor: 'rgba(232,184,109,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,184,109,0.18)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    width: '100%',
+  },
+  aiHintLabel: {
+    fontSize: 10,
+    color: 'rgba(232,184,109,0.6)',
+    fontWeight: '600',
+    letterSpacing: 0.08,
+    marginBottom: 6,
+  },
+  aiHintText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 20,
+  },
+
+  // Bars
   barsWrap: {
-    width: SCREEN_WIDTH - 64,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 24,
-    padding: 20,
+    width: SCREEN_WIDTH - 48,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+
+  // Buttons
+  buttonsWrap: {
+    width: '100%',
+    gap: 12,
+  },
+  primaryBtn: {
+    borderRadius: 16,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnTxt: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a0f00',
+    fontFamily: FONT_BODY_SEMIBOLD,
+  },
+  ghostBtn: {
+    borderRadius: 16,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
-
-  buttonsWrap: { width: '100%', gap: 12 },
-  primaryBtn: {
-    borderRadius: 32, overflow: 'hidden',
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12,
-  },
-  primaryBtnGrad: {
-    paddingVertical: 20, alignItems: 'center', borderRadius: 32,
-  },
-  primaryBtnTxt: {
-    fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: 0.3,
-  },
-  secondaryBtn: {
-    paddingVertical: 16, alignItems: 'center',
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  secondaryBtnTxt: {
-    fontSize: 15, fontWeight: '700',
-    color: 'rgba(255,255,255,0.9)',
+  ghostBtnTxt: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.6)',
   },
 });

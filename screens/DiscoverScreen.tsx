@@ -1,17 +1,19 @@
 // screens/DiscoverScreen.tsx
-// Full-screen Muzz-style discover feed with top bar, swipe deck, circular actions, 4-tab bar.
+// Discover feed with branded header, swipe deck, and 4-button action row.
+// Tab bar is managed externally by BottomTabBar.
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert,
+  Animated, Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
+import { FONT_HEADING } from '../lib/fonts';
 import SwipeDeck from '../components/SwipeDeck';
 import DiscoverProfileCard, { DiscoverProfile } from '../components/DiscoverProfileCard';
 import SuperLikeModal from '../components/SuperLikeModal';
@@ -35,6 +37,17 @@ export default function DiscoverScreen({ navigation }: any) {
 
   const myUserIdRef = useRef<string>('');
   const swipeRef = useRef<{ index: number }>({ index: 0 });
+
+  // Pulsing dot animation for Agent Match PRO pill
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    ).start();
+  }, []);
 
   useEffect(() => {
     init();
@@ -176,41 +189,51 @@ export default function DiscoverScreen({ navigation }: any) {
   return (
     <LinearGradient colors={colors.bgGradient as any} style={s.bg}>
       <SafeAreaView style={s.safeArea}>
-        {/* TOP BAR */}
-        <View style={s.topBar}>
-          <TouchableOpacity style={[s.iconBtn, { borderColor: colors.border }]}>
-            <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
+        {/* ── HEADER ── */}
+        <View style={s.header}>
+          <View style={s.headerLeft}>
+            {/* Brand title */}
+            <Text style={[s.brandTitle, { color: colors.accentGold }]}>Avant</Text>
 
-          <TouchableOpacity style={[s.sortBtn, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <Ionicons name="swap-vertical" size={16} color={colors.textPrimary} />
-            <Text style={[s.sortText, { color: colors.textPrimary }]}>Sort</Text>
-          </TouchableOpacity>
-
-          <View style={s.topRight}>
-            <TouchableOpacity style={s.boostPill} activeOpacity={0.85}>
+            {/* Agent Match PRO pill */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('AgentMatches')}
+            >
               <LinearGradient
-                colors={['#0F766E', '#0D9488']}
+                colors={['rgba(124,58,237,0.25)', 'rgba(160,100,255,0.15)']}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={s.boostGrad}
+                end={{ x: 1, y: 0 }}
+                style={[s.agentPill, { borderColor: colors.accentPurple }]}
               >
-                <Text style={s.boostNumber}>{boostCredits}</Text>
-                <Ionicons name="rocket" size={14} color="#fff" />
+                <Animated.View style={[s.pulsingDot, { opacity: pulseAnim, backgroundColor: colors.accentPurple }]} />
+                <Text style={[s.agentPillText, { color: colors.accentPurple }]}>Agent Match</Text>
+                <View style={[s.proBadge, { backgroundColor: colors.accentPurple }]}>
+                  <Text style={s.proBadgeText}>PRO</Text>
+                </View>
+                {agentMatchCount > 0 && (
+                  <View style={s.agentCountBadge}>
+                    <Text style={s.agentCountText}>{agentMatchCount}</Text>
+                  </View>
+                )}
               </LinearGradient>
             </TouchableOpacity>
-
-            <TouchableOpacity style={[s.iconBtn, { borderColor: colors.border }]}>
-              <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
-              {agentMatchCount > 0 && <View style={s.notifDot} />}
-            </TouchableOpacity>
           </View>
+
+          {/* Filter icon */}
+          <TouchableOpacity
+            style={[s.filterBtn, { borderColor: colors.border }]}
+            activeOpacity={0.7}
+            onPress={() => Alert.alert('Filters', 'Filter screen coming soon')}
+          >
+            <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
-        {/* SWIPE DECK */}
+        {/* ── CONTENT ── */}
         {loading ? (
           <View style={s.centerWrap}>
-            <ActivityIndicator color={colors.accentPink} size="large" />
+            <ActivityIndicator color={colors.accentGold} size="large" />
           </View>
         ) : error ? (
           <View style={s.centerWrap}>
@@ -224,7 +247,7 @@ export default function DiscoverScreen({ navigation }: any) {
               }}
               style={{ marginTop: 16 }}
             >
-              <Text style={{ color: colors.accentPink, fontSize: 15, fontWeight: '700' }}>
+              <Text style={{ color: colors.accentGold, fontSize: 15, fontWeight: '700' }}>
                 {t('common.retry')}
               </Text>
             </TouchableOpacity>
@@ -249,89 +272,53 @@ export default function DiscoverScreen({ navigation }: any) {
               />
             </View>
 
-            {/* ACTION BUTTONS ROW (3 circles) */}
+            {/* ── ACTION BUTTONS ROW (4 circles) ── */}
             <View style={s.actionsRow}>
-              {/* PASS button (black/dark circle) */}
+              {/* Pass */}
               <TouchableOpacity
                 style={s.passBtn}
                 onPress={() => profiles[0] && handleSwipeLeft(profiles[0])}
                 activeOpacity={0.85}
               >
-                <Ionicons name="close" size={30} color="#fff" />
+                <Ionicons name="close" size={28} color="rgba(255,255,255,0.7)" />
               </TouchableOpacity>
 
-              {/* SUPER LIKE (purple gradient) */}
+              {/* Super-like */}
               <TouchableOpacity
-                style={s.superBtn}
+                style={s.superLikeBtn}
                 onPress={openSuperLike}
                 activeOpacity={0.85}
               >
-                <LinearGradient
-                  colors={['#818CF8', '#6366F1', '#4F46E5']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={s.superGrad}
-                >
-                  <Ionicons name="star" size={26} color="#fff" />
-                </LinearGradient>
+                <Ionicons name="star-outline" size={24} color="rgba(100,160,255,0.9)" />
               </TouchableOpacity>
 
-              {/* LIKE (pink gradient) */}
+              {/* Like (gold gradient) */}
               <TouchableOpacity
-                style={s.likeBtn}
+                style={s.likeBtnWrap}
                 onPress={() => profiles[0] && handleSwipeRight(profiles[0])}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={['#FF5E8A', '#FF6B9D', '#F472B6']}
+                  colors={colors.goldGradient as any}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={s.likeGrad}
                 >
-                  <Ionicons name="checkmark" size={30} color="#fff" />
+                  <Ionicons name="heart" size={28} color="#1a1a1a" />
                 </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Boost */}
+              <TouchableOpacity
+                style={s.boostBtn}
+                onPress={() => Alert.alert('Boost', 'Boost coming soon')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="rocket-outline" size={22} color="rgba(160,100,255,0.9)" />
               </TouchableOpacity>
             </View>
           </>
         )}
-
-        {/* 4-TAB FLOATING BAR */}
-        <View style={[s.tabBarWrap, { backgroundColor: isDark ? 'rgba(10,11,26,0.85)' : 'rgba(255,255,255,0.85)' }]}>
-          <BlurView intensity={isDark ? 80 : 60} tint={isDark ? 'dark' : 'light'} style={s.tabBarBlur}>
-            <View style={[s.tabBarInner, { borderColor: colors.border }]}>
-              <TabItem
-                icon="heart"
-                label="Discover"
-                active
-                color={colors.accentPink}
-                inactiveColor={colors.tabInactive}
-                onPress={() => {}}
-              />
-              <TabItem
-                icon="compass"
-                label="Explore"
-                color={colors.accentPink}
-                inactiveColor={colors.tabInactive}
-                onPress={() => navigation.navigate('Explore')}
-              />
-              <TabItem
-                icon="chatbubble"
-                label="Chat"
-                color={colors.accentPink}
-                inactiveColor={colors.tabInactive}
-                badge={0}
-                onPress={() => navigation.navigate('Home', { initialTab: 'messages' })}
-              />
-              <TabItem
-                icon="menu"
-                label="Menu"
-                color={colors.accentPink}
-                inactiveColor={colors.tabInactive}
-                onPress={() => navigation.navigate('Profile')}
-              />
-            </View>
-          </BlurView>
-        </View>
 
         <SuperLikeModal
           profile={superLikeProfile}
@@ -347,114 +334,87 @@ export default function DiscoverScreen({ navigation }: any) {
   );
 }
 
-function TabItem({
-  icon,
-  label,
-  active = false,
-  color,
-  inactiveColor,
-  badge = 0,
-  onPress,
-}: {
-  icon: any;
-  label: string;
-  active?: boolean;
-  color: string;
-  inactiveColor: string;
-  badge?: number;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity style={s.tab} activeOpacity={0.7} onPress={onPress}>
-      <View style={{ position: 'relative' }}>
-        <Ionicons name={active ? icon : `${icon}-outline`} size={22} color={active ? color : inactiveColor} />
-        {badge > 0 && (
-          <View style={s.tabBadge}>
-            <Text style={s.tabBadgeText}>{badge}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={[s.tabLbl, { color: active ? color : inactiveColor }]}>{label}</Text>
-      {active && <View style={[s.tabDot, { backgroundColor: color }]} />}
-    </TouchableOpacity>
-  );
-}
-
 const s = StyleSheet.create({
   bg: { flex: 1 },
   safeArea: { flex: 1 },
 
-  // Top bar
-  topBar: {
+  /* ── Header ── */
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  brandTitle: {
+    fontSize: 22,
+    fontFamily: FONT_HEADING,
+    letterSpacing: 0.3,
+  },
+
+  /* Agent Match PRO pill */
+  agentPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  pulsingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  agentPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  proBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  proBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.6,
+  },
+  agentCountBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E8B86D',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    position: 'relative',
+    paddingHorizontal: 4,
+    marginLeft: 2,
   },
-  sortBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 22,
-    borderWidth: 1,
-  },
-  sortText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  topRight: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-  },
-  boostPill: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    shadowColor: '#0D9488',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  boostGrad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  boostNumber: {
-    fontSize: 15,
+  agentCountText: {
+    fontSize: 10,
     fontWeight: '900',
     color: '#fff',
   },
-  notifDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    backgroundColor: '#FF6B9D',
-    borderWidth: 2,
-    borderColor: '#0A0B1A',
+
+  /* Filter button */
+  filterBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
 
-  // Deck wrap
+  /* ── Deck ── */
   deckWrap: {
     flex: 1,
     alignItems: 'center',
@@ -462,51 +422,42 @@ const s = StyleSheet.create({
     paddingTop: 4,
   },
 
-  // Action buttons row
+  /* ── Action buttons row ── */
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 22,
-    paddingVertical: 18,
-    marginBottom: 110,
+    gap: 18,
+    paddingVertical: 16,
+    marginBottom: 90,
   },
   passBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#1a1a1a',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.45,
+  },
+  superLikeBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(100,160,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(100,160,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  likeBtnWrap: {
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#E8B86D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
     shadowRadius: 16,
-    elevation: 10,
-  },
-  superBtn: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    elevation: 12,
-  },
-  superGrad: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  likeBtn: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#FF6B9D',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
     elevation: 12,
   },
   likeGrad: {
@@ -516,55 +467,20 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  boostBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(160,100,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(160,100,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-  // Center states
+  /* ── Center states (loading / error / empty) ── */
   centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyEmoji: { fontSize: 56, marginBottom: 16 },
   emptyTitle: { fontSize: 22, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
   emptySub: { fontSize: 15, fontWeight: '500', textAlign: 'center', marginTop: 8, lineHeight: 22 },
-
-  // Tab bar
-  tabBarWrap: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 30,
-    elevation: 20,
-  },
-  tabBarBlur: { borderRadius: 32, overflow: 'hidden' },
-  tabBarInner: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius: 32,
-    borderWidth: 1,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-    position: 'relative',
-    paddingVertical: 4,
-  },
-  tabLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
-  tabDot: { position: 'absolute', bottom: -6, width: 4, height: 4, borderRadius: 2 },
-  tabBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FF6B9D',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  tabBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff' },
 });

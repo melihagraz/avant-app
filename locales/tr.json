@@ -104,9 +104,56 @@
     "galleryPermission": "Fotoğraf seçmek için galeri iznine ihtiyaç var."
   },
 
+  "tabs": {
+    "discover": "Kesfet",
+    "chat": "Sohbet",
+    "profile": "Profil"
+  },
+
+  "splash": {
+    "start": "Basla",
+    "haveAccount": "Zaten hesabim var",
+    "tagline": "Your AI finds the connection",
+    "legal": "Devam ederek Kullanim Kosullarini kabul edersiniz"
+  },
+
+  "agentMatch": {
+    "title": "Agent Match",
+    "premium": "PREMIUM",
+    "score": "Uyumluluk Skoru",
+    "startChat": "Mesaj Baslat",
+    "goBack": "Geri Don",
+    "insights": "Agent Icgoruleri",
+    "conversation": "Agent konusmasi",
+    "yourAgent": "SENIN AGENT'IN",
+    "theirAgent": "KARSI AGENT"
+  },
+
+  "filter": {
+    "title": "Filtreler",
+    "reset": "Sifirla",
+    "apply": "Uygula",
+    "discovery": "Kesif Ayarlari",
+    "preferences": "Tercihler",
+    "advanced": "Gelismis",
+    "distance": "Mesafe",
+    "ageRange": "Yas Araligi",
+    "gender": "Cinsiyet",
+    "intent": "Iliski niyeti",
+    "verifiedOnly": "Dogrulanmis profiller",
+    "premiumLocked": "Premium gerekli"
+  },
+
+  "chatAgent": {
+    "title": "Agent Asistan",
+    "loading": "Oneriler hazirlaniyor...",
+    "tip": "Konusmaniza uygun oneriler",
+    "error": "Oneriler yuklenemedi"
+  },
+
   "auth": {
     "logo": "avant",
-    "tagline": "agentin önce buluşur",
+    "tagline": "Your AI finds the connection",
     "emailLabel": "Email adresin",
     "emailPlaceholder": "ornek@email.com",
     "emailHint": "Emailine 8 haneli doğrulama kodu göndereceğiz 💌",
