@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Svg, { Circle, Path, Ellipse } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -17,11 +18,14 @@ import { buildAgentSystemPrompt } from '../../src/lib/agentPrompt';
 import { moderateText, getModerationMessage } from '../../src/lib/moderation';
 import { trackEvent } from '../../src/lib/analytics';
 
-// ─── Question definitions ───
+// ─── Phase type ───
+type Phase = 'photos' | 'chatbot';
+
+// ─── Question definitions for chatbot phase ───
 interface Question {
   key: string;
   agentText: string | ((a: Record<string, string>) => string);
-  type: 'text' | 'number' | 'chips' | 'chips_multi' | 'prompts' | 'photo';
+  type: 'text' | 'number' | 'chips' | 'chips_multi' | 'prompts';
   placeholder?: string;
   options?: { value: string; label: string }[];
   optional?: boolean;
@@ -52,7 +56,7 @@ const QUESTIONS: Question[] = [
   ]},
   { key: 'religion', agentText: 'Din/inanc konusundaki gorusun?', type: 'chips', optional: true, options: [
     { value: 'muslim', label: 'Muslim' }, { value: 'christian', label: 'Hristiyan' },
-    { value: 'spiritual', label: 'Spiritüel' }, { value: 'agnostic', label: 'Agnostik' },
+    { value: 'spiritual', label: 'Spirituel' }, { value: 'agnostic', label: 'Agnostik' },
     { value: 'atheist', label: 'Ateist' }, { value: 'prefer_not_say', label: 'Belirtmek istemem' },
   ]},
   { key: 'alcohol', agentText: 'Alkol kullaniyor musun?', type: 'chips', optional: true, options: [
@@ -70,7 +74,6 @@ const QUESTIONS: Question[] = [
   { key: 'dealbreakers', agentText: 'Kesinlikle kabul edemeyecegin seyler neler? Bunlari bilmem onemli.', type: 'text', placeholder: 'Dealbreaker\'larin...', maxLength: 500 },
   { key: 'extra', agentText: 'Bilmem gereken baska bir sey var mi? (Istersen bos birakabilirsin)', type: 'text', optional: true, placeholder: 'Eklemek istediklerin...', maxLength: 500 },
   { key: 'prompts', agentText: (a) => `Neredeyse bitti ${a.name}! Son olarak, kendini ifade edecek 3 prompt sec ve yanitla.`, type: 'prompts' },
-  { key: 'photo', agentText: (a) => `Son adim! Profiline bir fotograf yukle ${a.name}. Bu senin ilk izlenimin olacak.`, type: 'photo' },
 ];
 
 const PROMPT_OPTIONS = [
@@ -84,13 +87,127 @@ const PROMPT_OPTIONS = [
   { key: 'biggestQuality', title: 'En deger verdigim ozelligim...' },
 ];
 
+const TOTAL_SLOTS = 6;
+
 interface ChatMessage {
   role: 'agent' | 'user';
   text: string;
 }
 
-export default function ProfileSetupScreen() {
-  const router = useRouter();
+// ═══════════════════════════════════════════
+//  PHOTO PHASE COMPONENT
+// ═══════════════════════════════════════════
+function PhotoPhase({ photos, onPhotosChange, onContinue }: {
+  photos: string[];
+  onPhotosChange: (p: string[]) => void;
+  onContinue: () => void;
+}) {
+  const pickPhoto = async (index: number) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [3, 4],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const newPhotos = [...photos];
+      if (index < newPhotos.length) {
+        newPhotos[index] = result.assets[0].uri;
+      } else {
+        newPhotos.push(result.assets[0].uri);
+      }
+      onPhotosChange(newPhotos);
+    }
+  };
+
+  const slots = Array.from({ length: TOTAL_SLOTS }, (_, i) => photos[i] || null);
+
+  return (
+    <SafeAreaView style={ps.container}>
+      {/* Progress dots */}
+      <View style={ps.steps}>
+        <View style={[ps.dot, ps.dotDone]} />
+        <View style={[ps.dot, ps.dotDone]} />
+        <View style={ps.dot} />
+        <View style={ps.dot} />
+        <View style={ps.dot} />
+      </View>
+
+      <Animated.Text entering={FadeInUp.duration(600)} style={ps.title}>
+        Fotograflarini{'\n'}ekle
+      </Animated.Text>
+      <Text style={ps.sub}>Ilk 3 fotograf eslemeyi dogrudan etkiler</Text>
+
+      {/* Photo Grid */}
+      <Animated.View entering={FadeInDown.duration(600).delay(200)} style={ps.photoGrid}>
+        {slots.map((uri, i) => (
+          <Pressable key={i} style={[ps.photoSlot, uri && ps.photoFilled]} onPress={() => pickPhoto(i)}>
+            {uri ? (
+              <Image source={{ uri }} style={ps.slotImage} />
+            ) : (
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Circle cx={12} cy={12} r={10} stroke="rgba(255,255,255,0.25)" strokeWidth={1.5} />
+                <Path d="M12 8v8M8 12h8" stroke="rgba(255,255,255,0.25)" strokeWidth={1.5} strokeLinecap="round" />
+              </Svg>
+            )}
+          </Pressable>
+        ))}
+      </Animated.View>
+
+      {/* Tip */}
+      <View style={ps.tipBox}>
+        <Text style={ps.tipText}>
+          💡 <Text style={{ fontWeight: '700' }}>Ipucu:</Text> Gercek gulumseme iceren fotograflar %40 daha fazla eslisme saglar.
+        </Text>
+      </View>
+
+      {/* Continue */}
+      <Pressable onPress={onContinue} disabled={photos.length === 0}>
+        {({ pressed }) => (
+          <LinearGradient
+            colors={photos.length > 0 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[ps.btnPrimary, (pressed && photos.length > 0) && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+          >
+            <Text style={[ps.btnText, photos.length === 0 && { color: 'rgba(255,255,255,0.3)' }]}>Devam →</Text>
+          </LinearGradient>
+        )}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+const ps = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.surface, paddingHorizontal: 22, paddingTop: 12 },
+  steps: { flexDirection: 'row', gap: 5, marginBottom: 22 },
+  dot: { height: 3, flex: 1, borderRadius: 99, backgroundColor: Colors.white10 },
+  dotDone: { backgroundColor: Colors.gold },
+  title: { fontFamily: Fonts.heading, fontSize: 28, color: Colors.white, lineHeight: 34, marginBottom: 6 },
+  sub: { fontFamily: Fonts.body, fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 20 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
+  photoSlot: {
+    width: '31%', aspectRatio: 3 / 4, borderRadius: 14,
+    backgroundColor: Colors.white05, borderWidth: 1.5,
+    borderStyle: 'dashed', borderColor: Colors.white12,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  photoFilled: { borderStyle: 'solid', borderColor: 'transparent' },
+  slotImage: { width: '100%', height: '100%', borderRadius: 14 },
+  tipBox: {
+    backgroundColor: Colors.goldBg, borderWidth: 1, borderColor: Colors.goldBorder,
+    borderRadius: 12, padding: 11, paddingHorizontal: 14, marginBottom: 18,
+  },
+  tipText: { fontFamily: Fonts.body, fontSize: 12, color: 'rgba(232,184,109,0.85)', lineHeight: 18 },
+  btnPrimary: { height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  btnText: { fontFamily: Fonts.bodySemiBold, fontSize: 15, color: Colors.goldText },
+});
+
+// ═══════════════════════════════════════════
+//  CHATBOT PHASE COMPONENT
+// ═══════════════════════════════════════════
+function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinished: () => void }) {
   const { user, checkAgent } = useAuthStore();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -108,24 +225,17 @@ export default function ProfileSetupScreen() {
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
   const [promptAnswer, setPromptAnswer] = useState('');
 
-  // Photo
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-
-  // Initialize first question
-  useEffect(() => {
-    showAgentMessage(0);
-  }, []);
+  useEffect(() => { showAgentMessage(0); }, []);
 
   const getQuestionText = (q: Question): string => {
     if (typeof q.agentText === 'function') return q.agentText(answers);
     return q.agentText;
   };
 
-  const showAgentMessage = (questionIndex: number) => {
+  const showAgentMessage = (qi: number) => {
     setTyping(true);
     setTimeout(() => {
-      const q = QUESTIONS[questionIndex];
-      setMessages((prev) => [...prev, { role: 'agent', text: getQuestionText(q) }]);
+      setMessages((prev) => [...prev, { role: 'agent', text: getQuestionText(QUESTIONS[qi]) }]);
       setTyping(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }, 800);
@@ -133,20 +243,17 @@ export default function ProfileSetupScreen() {
 
   const advanceToNext = (answer: string) => {
     const q = QUESTIONS[step];
-
-    // Add user message
     setMessages((prev) => [...prev, { role: 'user', text: answer }]);
-    setAnswers((prev) => ({ ...prev, [q.key]: answer }));
+    const newAnswers = { ...answers, [q.key]: answer };
+    setAnswers(newAnswers);
     setInputText('');
     setSelectedChips([]);
 
     const nextStep = step + 1;
     if (nextStep >= QUESTIONS.length) {
-      // Finalize
-      finalize({ ...answers, [q.key]: answer });
+      finalize(newAnswers);
       return;
     }
-
     setStep(nextStep);
     showAgentMessage(nextStep);
   };
@@ -154,33 +261,18 @@ export default function ProfileSetupScreen() {
   const handleTextSubmit = () => {
     const q = QUESTIONS[step];
     const text = inputText.trim();
-
     if (!text && !q.optional) return;
-    if (!text && q.optional) {
-      advanceToNext('-');
-      return;
-    }
+    if (!text && q.optional) { advanceToNext('-'); return; }
 
-    // Validation
     if (q.type === 'number') {
       const n = parseInt(text);
-      if (isNaN(n) || n < 18 || n > 80) {
-        Alert.alert('Hata', 'Gecerli bir yas gir (18-80).');
-        return;
-      }
+      if (isNaN(n) || n < 18 || n > 80) { Alert.alert('Hata', 'Gecerli bir yas gir (18-80).'); return; }
     }
-    if (q.key === 'name' && text.length < 2) {
-      Alert.alert('Hata', 'Isim en az 2 karakter olmali.');
-      return;
-    }
+    if (q.key === 'name' && text.length < 2) { Alert.alert('Hata', 'Isim en az 2 karakter olmali.'); return; }
 
-    // Moderation for text fields
     if (['personality', 'looking_for', 'dealbreakers', 'extra', 'job'].includes(q.key)) {
       const mod = moderateText(text);
-      if (!mod.clean) {
-        Alert.alert('Uyari', getModerationMessage(mod.reason || ''));
-        return;
-      }
+      if (!mod.clean) { Alert.alert('Uyari', getModerationMessage(mod.reason || '')); return; }
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -190,15 +282,10 @@ export default function ProfileSetupScreen() {
   const handleChipSelect = (value: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const q = QUESTIONS[step];
-
     if (q.type === 'chips') {
-      const label = q.options?.find(o => o.value === value)?.label || value;
-      advanceToNext(label);
+      advanceToNext(q.options?.find(o => o.value === value)?.label || value);
     } else {
-      // chips_multi
-      setSelectedChips((prev) =>
-        prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-      );
+      setSelectedChips((prev) => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
     }
   };
 
@@ -208,131 +295,76 @@ export default function ProfileSetupScreen() {
     advanceToNext(selectedChips.join(', '));
   };
 
-  const handleSkip = () => {
-    advanceToNext('-');
-  };
-
-  // Photo
-  const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhotoUri(result.assets[0].uri);
-    }
-  };
-
-  const confirmPhoto = () => {
-    if (!photoUri) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    advanceToNext('Fotograf yuklendi');
-  };
-
-  // Location
   const detectLocation = async () => {
     setDetectingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Izin gerekli', 'Konum izni verilmedi.');
-        setDetectingLocation(false);
-        return;
-      }
+      if (status !== 'granted') { Alert.alert('Izin gerekli', 'Konum izni verilmedi.'); setDetectingLocation(false); return; }
       const loc = await Location.getCurrentPositionAsync({});
       const [place] = await Location.reverseGeocodeAsync(loc.coords);
-      if (place) {
-        const city = place.city || place.region || place.country || '';
-        setInputText(city);
-        trackEvent('location_detected', { city });
-      }
-    } catch {
-      Alert.alert('Hata', 'Konum algilanamadi.');
-    }
+      if (place) setInputText(place.city || place.region || place.country || '');
+    } catch { Alert.alert('Hata', 'Konum algilanamadi.'); }
     setDetectingLocation(false);
   };
 
-  // Prompts
   const openPrompt = (key: string) => {
     setActivePromptKey(key);
-    const existing = selectedPrompts.find(p => p.key === key);
-    setPromptAnswer(existing?.answer || '');
+    setPromptAnswer(selectedPrompts.find(p => p.key === key)?.answer || '');
   };
-
   const savePrompt = () => {
     if (!activePromptKey || promptAnswer.trim().length < 3) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedPrompts((prev) => {
-      const filtered = prev.filter(p => p.key !== activePromptKey);
-      return [...filtered, { key: activePromptKey, answer: promptAnswer.trim() }];
-    });
-    setActivePromptKey(null);
-    setPromptAnswer('');
+    setSelectedPrompts((prev) => [...prev.filter(p => p.key !== activePromptKey), { key: activePromptKey, answer: promptAnswer.trim() }]);
+    setActivePromptKey(null); setPromptAnswer('');
   };
-
   const deletePrompt = () => {
     if (!activePromptKey) return;
     setSelectedPrompts((prev) => prev.filter(p => p.key !== activePromptKey));
-    setActivePromptKey(null);
-    setPromptAnswer('');
+    setActivePromptKey(null); setPromptAnswer('');
   };
-
   const confirmPrompts = () => {
-    if (selectedPrompts.length < 3) {
-      Alert.alert('Eksik', 'En az 3 prompt yanitlamalisin.');
-      return;
-    }
+    if (selectedPrompts.length < 3) { Alert.alert('Eksik', 'En az 3 prompt yanitlamalisin.'); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     advanceToNext(`${selectedPrompts.length} prompt yanitlandi`);
   };
 
-  // Finalize
+  // ── FINALIZE ──
   const finalize = async (allAnswers: Record<string, string>) => {
     setSaving(true);
     setMessages((prev) => [...prev, { role: 'agent', text: `Harika ${allAnswers.name || ''}! Agentin hazirlaniyor...` }]);
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Oturum bulunamadi');
-
       const userId = session.user.id;
       const email = session.user.email || '';
 
-      // Upload photo
-      let photoUrl = '';
-      if (photoUri) {
-        const ext = photoUri.split('.').pop() || 'jpg';
-        const fileName = `${userId}/${Date.now()}.${ext}`;
-        const response = await fetch(photoUri);
-        const blob = await response.blob();
-        const { error: uploadErr } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, blob, { contentType: `image/${ext}` });
-        if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-          photoUrl = urlData.publicUrl;
-        }
+      // Upload photos
+      const uploadedUrls: string[] = [];
+      for (const uri of photoUris) {
+        try {
+          const ext = uri.split('.').pop() || 'jpg';
+          const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          const { error: uploadErr } = await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${ext}` });
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            uploadedUrls.push(urlData.publicUrl);
+          }
+        } catch {}
       }
 
-      // Parse age range
       const [ageMin, ageMax] = (allAnswers.age_range || '18-80').split('-').map(Number);
-
-      // Parse prompts
       const promptsData = selectedPrompts.map(p => ({ key: p.key, answer: p.answer }));
 
-      // Upsert user profile
       const { error: profileErr } = await supabase.from('users').upsert({
-        id: userId,
-        email,
+        id: userId, email,
         name: allAnswers.name,
         age: parseInt(allAnswers.age) || 25,
         gender: allAnswers.gender?.toLowerCase() || 'other',
         seeking: (allAnswers.seeking || 'any').split(', ').map(s => s.toLowerCase()),
         city: allAnswers.city,
-        age_min: ageMin || 18,
-        age_max: ageMax || 80,
+        age_min: ageMin || 18, age_max: ageMax || 80,
         relationship_type: allAnswers.relationship?.toLowerCase() || 'figuring_out',
         dating_intention: allAnswers.relationship?.toLowerCase() || 'figuring_out',
         family_plans: allAnswers.family_plans !== '-' ? allAnswers.family_plans?.toLowerCase() : null,
@@ -342,61 +374,36 @@ export default function ProfileSetupScreen() {
         education: allAnswers.education !== '-' ? allAnswers.education : null,
         job: allAnswers.job,
         prompts: promptsData,
-        photos: photoUrl ? [photoUrl] : [],
+        photos: uploadedUrls,
         is_discoverable: true,
         last_active_at: new Date().toISOString(),
       });
+      if (profileErr) throw profileErr;
 
-      if (profileErr) {
-        console.error('Profile save error:', profileErr);
-        throw profileErr;
-      }
-
-      // Build agent system prompt
       const systemPrompt = buildAgentSystemPrompt(
-        allAnswers.personality || '',
-        allAnswers.looking_for || '',
-        allAnswers.dealbreakers || '',
+        allAnswers.personality || '', allAnswers.looking_for || '', allAnswers.dealbreakers || '',
         undefined,
-        {
-          dating_intention: allAnswers.relationship,
-          family_plans: allAnswers.family_plans !== '-' ? allAnswers.family_plans : undefined,
+        { dating_intention: allAnswers.relationship, family_plans: allAnswers.family_plans !== '-' ? allAnswers.family_plans : undefined,
           religion: allAnswers.religion !== '-' ? allAnswers.religion : undefined,
           alcohol: allAnswers.alcohol !== '-' ? allAnswers.alcohol : undefined,
           smoking: allAnswers.smoking !== '-' ? allAnswers.smoking : undefined,
-          education: allAnswers.education !== '-' ? allAnswers.education : undefined,
-        },
+          education: allAnswers.education !== '-' ? allAnswers.education : undefined },
         promptsData,
       );
 
-      // Create agent
       const { error: agentErr } = await supabase.from('agents').upsert({
-        user_id: userId,
-        personality: allAnswers.personality || '',
-        looking_for: allAnswers.looking_for || '',
-        dealbreakers: allAnswers.dealbreakers || '',
-        system_prompt: systemPrompt,
-        tags: [allAnswers.job, allAnswers.city].filter(Boolean),
+        user_id: userId, personality: allAnswers.personality || '',
+        looking_for: allAnswers.looking_for || '', dealbreakers: allAnswers.dealbreakers || '',
+        system_prompt: systemPrompt, tags: [allAnswers.job, allAnswers.city].filter(Boolean),
       });
+      if (agentErr) throw agentErr;
 
-      if (agentErr) {
-        console.error('Agent create error:', agentErr);
-        throw agentErr;
-      }
-
-      // Start matching
-      try {
-        await supabase.functions.invoke('start-match', { body: {} });
-      } catch {}
-
+      try { await supabase.functions.invoke('start-match', { body: {} }); } catch {}
       await checkAgent(userId);
       trackEvent('onboarding_complete');
 
-      setMessages((prev) => [...prev, { role: 'agent', text: `Agentin hazir! Simdi sana en uygun kisileri bulacagim. Basarilar! 🎉` }]);
-
-      setTimeout(() => {
-        router.replace('/(tabs)/discover');
-      }, 1500);
+      setMessages((prev) => [...prev, { role: 'agent', text: 'Agentin hazir! Simdi sana en uygun kisileri bulacagim. Basarilar! 🎉' }]);
+      setTimeout(() => onFinished(), 1500);
     } catch (err) {
       console.error('Finalize error:', err);
       Alert.alert('Hata', 'Profil kaydedilemedi. Tekrar deneyin.');
@@ -408,115 +415,62 @@ export default function ProfileSetupScreen() {
   const progress = (step + 1) / QUESTIONS.length;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={cs.container}>
       {/* Progress */}
-      <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-      </View>
-      <View style={styles.stepRow}>
-        <Pressable onPress={() => { if (step > 0) { setStep(step - 1); setMessages(msgs => msgs.slice(0, -2)); } }}>
-          <Text style={styles.backText}>{step > 0 ? '← Geri' : ''}</Text>
+      <View style={cs.progressBar}><View style={[cs.progressFill, { width: `${progress * 100}%` }]} /></View>
+      <View style={cs.stepRow}>
+        <Pressable onPress={() => { if (step > 0) { setStep(step - 1); setMessages(m => m.slice(0, -2)); } }}>
+          <Text style={cs.backText}>{step > 0 ? '← Geri' : ''}</Text>
         </Pressable>
-        <Text style={styles.stepText}>{step + 1} / {QUESTIONS.length}</Text>
-        {currentQ?.optional && (
-          <Pressable onPress={handleSkip}><Text style={styles.skipText}>Atla</Text></Pressable>
-        )}
+        <Text style={cs.stepText}>{step + 1} / {QUESTIONS.length}</Text>
+        {currentQ?.optional && <Pressable onPress={() => advanceToNext('-')}><Text style={cs.skipText}>Atla</Text></Pressable>}
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* Messages */}
-        <ScrollView
-          ref={scrollRef}
-          style={styles.chatArea}
-          contentContainerStyle={styles.chatContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView ref={scrollRef} style={cs.chatArea} contentContainerStyle={cs.chatContent} showsVerticalScrollIndicator={false}>
           {messages.map((msg, i) => (
-            <Animated.View
-              key={i}
-              entering={FadeInDown.duration(400)}
-              style={[styles.msgRow, msg.role === 'user' && styles.msgRowUser]}
-            >
+            <Animated.View key={i} entering={FadeInDown.duration(400)} style={[cs.msgRow, msg.role === 'user' && cs.msgRowUser]}>
               {msg.role === 'agent' && (
-                <LinearGradient colors={[Colors.purpleDark, Colors.purple]} style={styles.avatar}>
-                  <Text style={styles.avatarText}>A</Text>
-                </LinearGradient>
+                <LinearGradient colors={[Colors.purpleDark, Colors.purple]} style={cs.avatar}><Text style={cs.avatarText}>A</Text></LinearGradient>
               )}
-              <View style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleAgent]}>
-                <Text style={[styles.bubbleText, msg.role === 'user' && { color: Colors.goldText }]}>{msg.text}</Text>
+              <View style={[cs.bubble, msg.role === 'user' ? cs.bubbleUser : cs.bubbleAgent]}>
+                <Text style={[cs.bubbleText, msg.role === 'user' && { color: Colors.goldText }]}>{msg.text}</Text>
               </View>
               {msg.role === 'user' && (
-                <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={styles.avatar}>
-                  <Text style={[styles.avatarText, { color: Colors.goldText }]}>S</Text>
-                </LinearGradient>
+                <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={cs.avatar}><Text style={[cs.avatarText, { color: Colors.goldText }]}>S</Text></LinearGradient>
               )}
             </Animated.View>
           ))}
 
           {typing && (
-            <View style={[styles.msgRow]}>
-              <LinearGradient colors={[Colors.purpleDark, Colors.purple]} style={styles.avatar}>
-                <Text style={styles.avatarText}>A</Text>
-              </LinearGradient>
-              <View style={[styles.bubble, styles.bubbleAgent]}>
-                <Text style={styles.typingDots}>...</Text>
-              </View>
+            <View style={cs.msgRow}>
+              <LinearGradient colors={[Colors.purpleDark, Colors.purple]} style={cs.avatar}><Text style={cs.avatarText}>A</Text></LinearGradient>
+              <View style={[cs.bubble, cs.bubbleAgent]}><Text style={cs.typingDots}>...</Text></View>
             </View>
           )}
 
           {/* Chips */}
           {!typing && currentQ?.type === 'chips' && (
-            <View style={styles.chipsWrap}>
+            <View style={cs.chipsWrap}>
               {currentQ.options?.map((opt) => (
                 <Pressable key={opt.value} onPress={() => handleChipSelect(opt.value)}>
-                  <View style={styles.chip}>
-                    <Text style={styles.chipText}>{opt.label}</Text>
-                  </View>
+                  <View style={cs.chip}><Text style={cs.chipText}>{opt.label}</Text></View>
                 </Pressable>
               ))}
             </View>
           )}
-
           {!typing && currentQ?.type === 'chips_multi' && (
-            <View style={styles.chipsWrap}>
+            <View style={cs.chipsWrap}>
               {currentQ.options?.map((opt) => (
                 <Pressable key={opt.value} onPress={() => handleChipSelect(opt.value)}>
-                  <View style={[styles.chip, selectedChips.includes(opt.value) && styles.chipSelected]}>
-                    <Text style={[styles.chipText, selectedChips.includes(opt.value) && { color: Colors.goldText }]}>{opt.label}</Text>
+                  <View style={[cs.chip, selectedChips.includes(opt.value) && cs.chipSelected]}>
+                    <Text style={[cs.chipText, selectedChips.includes(opt.value) && { color: Colors.goldText }]}>{opt.label}</Text>
                   </View>
                 </Pressable>
               ))}
               {selectedChips.length > 0 && (
                 <Pressable onPress={handleMultiChipContinue}>
-                  <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={styles.continueBtn}>
-                    <Text style={styles.continueBtnText}>Devam →</Text>
-                  </LinearGradient>
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          {/* Photo */}
-          {!typing && currentQ?.type === 'photo' && (
-            <View style={styles.photoSection}>
-              {photoUri ? (
-                <View style={styles.photoPreview}>
-                  <Image source={{ uri: photoUri }} style={styles.photoImg} />
-                  <Pressable onPress={pickPhoto} style={styles.changePhoto}>
-                    <Text style={styles.changePhotoText}>Degistir</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable onPress={pickPhoto} style={styles.pickPhotoBtn}>
-                  <Text style={{ fontSize: 32 }}>📷</Text>
-                  <Text style={styles.pickPhotoText}>Fotograf Sec</Text>
-                </Pressable>
-              )}
-              {photoUri && (
-                <Pressable onPress={confirmPhoto}>
-                  <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={styles.continueBtn}>
-                    <Text style={styles.continueBtnText}>Tamamla →</Text>
-                  </LinearGradient>
+                  <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={cs.continueBtn}><Text style={cs.continueBtnText}>Devam →</Text></LinearGradient>
                 </Pressable>
               )}
             </View>
@@ -524,100 +478,67 @@ export default function ProfileSetupScreen() {
 
           {/* Prompts */}
           {!typing && currentQ?.type === 'prompts' && (
-            <View style={styles.promptsSection}>
+            <View style={cs.promptsSection}>
               {PROMPT_OPTIONS.map((p) => {
                 const answered = selectedPrompts.find(sp => sp.key === p.key);
                 return (
-                  <Pressable key={p.key} onPress={() => openPrompt(p.key)} style={[styles.promptChip, answered && styles.promptChipAnswered]}>
-                    <Text style={styles.promptChipTitle}>{p.title}</Text>
-                    {answered && <Text style={styles.promptChipAnswer} numberOfLines={1}>{answered.answer}</Text>}
+                  <Pressable key={p.key} onPress={() => openPrompt(p.key)} style={[cs.promptChip, answered && cs.promptChipAnswered]}>
+                    <Text style={cs.promptChipTitle}>{p.title}</Text>
+                    {answered && <Text style={cs.promptChipAnswer} numberOfLines={1}>{answered.answer}</Text>}
                   </Pressable>
                 );
               })}
-              <Text style={styles.promptHint}>{selectedPrompts.length}/3 yanitlandi</Text>
+              <Text style={cs.promptHint}>{selectedPrompts.length}/3 yanitlandi</Text>
               {selectedPrompts.length >= 3 && (
                 <Pressable onPress={confirmPrompts}>
-                  <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={styles.continueBtn}>
-                    <Text style={styles.continueBtnText}>Devam →</Text>
-                  </LinearGradient>
+                  <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={cs.continueBtn}><Text style={cs.continueBtnText}>Devam →</Text></LinearGradient>
                 </Pressable>
               )}
             </View>
           )}
         </ScrollView>
 
-        {/* Text Input */}
+        {/* Text input */}
         {!typing && (currentQ?.type === 'text' || currentQ?.type === 'number') && !saving && (
-          <View style={styles.inputBar}>
+          <View style={cs.inputBar}>
             {currentQ.key === 'city' && (
-              <Pressable onPress={detectLocation} style={styles.locationBtn} disabled={detectingLocation}>
+              <Pressable onPress={detectLocation} style={cs.locationBtn} disabled={detectingLocation}>
                 {detectingLocation ? <ActivityIndicator size="small" color={Colors.gold} /> : <Text style={{ fontSize: 14 }}>📍</Text>}
               </Pressable>
             )}
             <TextInput
-              style={styles.input}
-              placeholder={currentQ.placeholder || 'Yaz...'}
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              value={inputText}
-              onChangeText={setInputText}
-              onSubmitEditing={handleTextSubmit}
+              style={cs.input} placeholder={currentQ.placeholder || 'Yaz...'} placeholderTextColor="rgba(255,255,255,0.3)"
+              value={inputText} onChangeText={setInputText} onSubmitEditing={handleTextSubmit}
               keyboardType={currentQ.type === 'number' ? 'number-pad' : 'default'}
               maxLength={currentQ.maxLength || (currentQ.type === 'number' ? 3 : currentQ.key === 'name' ? 50 : 500)}
-              multiline={!!currentQ.maxLength && currentQ.maxLength > 100}
-              editable={!saving}
+              multiline={!!currentQ.maxLength && currentQ.maxLength > 100} editable={!saving}
             />
             <Pressable onPress={handleTextSubmit} disabled={!inputText.trim() && !currentQ.optional}>
-              <LinearGradient
-                colors={inputText.trim() || currentQ.optional ? [Colors.gold, Colors.goldDark] : ['#333', '#222']}
-                style={styles.sendBtn}
-              >
-                <Text style={styles.sendBtnText}>→</Text>
+              <LinearGradient colors={inputText.trim() || currentQ.optional ? [Colors.gold, Colors.goldDark] : ['#333', '#222']} style={cs.sendBtn}>
+                <Text style={cs.sendBtnText}>→</Text>
               </LinearGradient>
             </Pressable>
           </View>
         )}
-
         {saving && (
-          <View style={styles.savingBar}>
-            <ActivityIndicator color={Colors.gold} />
-            <Text style={styles.savingText}>Agentin hazirlaniyor...</Text>
-          </View>
+          <View style={cs.savingBar}><ActivityIndicator color={Colors.gold} /><Text style={cs.savingText}>Agentin hazirlaniyor...</Text></View>
         )}
       </KeyboardAvoidingView>
 
       {/* Prompt Modal */}
       <Modal visible={!!activePromptKey} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {PROMPT_OPTIONS.find(p => p.key === activePromptKey)?.title}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Yanitini yaz..."
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              value={promptAnswer}
-              onChangeText={setPromptAnswer}
-              maxLength={200}
-              multiline
-            />
-            <Text style={styles.modalCharCount}>{promptAnswer.length}/200</Text>
-            <View style={styles.modalBtns}>
+        <View style={cs.modalOverlay}>
+          <View style={cs.modalContent}>
+            <Text style={cs.modalTitle}>{PROMPT_OPTIONS.find(p => p.key === activePromptKey)?.title}</Text>
+            <TextInput style={cs.modalInput} placeholder="Yanitini yaz..." placeholderTextColor="rgba(255,255,255,0.3)" value={promptAnswer} onChangeText={setPromptAnswer} maxLength={200} multiline />
+            <Text style={cs.modalCharCount}>{promptAnswer.length}/200</Text>
+            <View style={cs.modalBtns}>
               {selectedPrompts.find(p => p.key === activePromptKey) && (
-                <Pressable onPress={deletePrompt} style={styles.modalDeleteBtn}>
-                  <Text style={styles.modalDeleteText}>Sil</Text>
-                </Pressable>
+                <Pressable onPress={deletePrompt} style={cs.modalDeleteBtn}><Text style={cs.modalDeleteText}>Sil</Text></Pressable>
               )}
-              <Pressable onPress={() => { setActivePromptKey(null); setPromptAnswer(''); }} style={styles.modalCancelBtn}>
-                <Text style={styles.modalCancelText}>Iptal</Text>
-              </Pressable>
+              <Pressable onPress={() => { setActivePromptKey(null); setPromptAnswer(''); }} style={cs.modalCancelBtn}><Text style={cs.modalCancelText}>Iptal</Text></Pressable>
               <Pressable onPress={savePrompt} disabled={promptAnswer.trim().length < 3}>
-                <LinearGradient
-                  colors={promptAnswer.trim().length >= 3 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']}
-                  style={styles.modalSaveBtn}
-                >
-                  <Text style={styles.modalSaveText}>Kaydet</Text>
-                </LinearGradient>
+                <LinearGradient colors={promptAnswer.trim().length >= 3 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']} style={cs.modalSaveBtn}><Text style={cs.modalSaveText}>Kaydet</Text></LinearGradient>
               </Pressable>
             </View>
           </View>
@@ -627,7 +548,7 @@ export default function ProfileSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const cs = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.surface },
   progressBar: { height: 3, backgroundColor: Colors.white10, marginHorizontal: 16, marginTop: 8, borderRadius: 99, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: Colors.gold, borderRadius: 99 },
@@ -652,13 +573,6 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: Fonts.bodyMedium, fontSize: 13, color: Colors.white80 },
   continueBtn: { height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 24 },
   continueBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: Colors.goldText },
-  photoSection: { paddingLeft: 40, gap: 12 },
-  photoPreview: { width: 160, height: 213, borderRadius: 16, overflow: 'hidden', position: 'relative' },
-  photoImg: { width: '100%', height: '100%' },
-  changePhoto: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10 },
-  changePhotoText: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white80 },
-  pickPhotoBtn: { width: 160, height: 213, borderRadius: 16, backgroundColor: Colors.white05, borderWidth: 1.5, borderStyle: 'dashed', borderColor: Colors.white12, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  pickPhotoText: { fontFamily: Fonts.bodyMedium, fontSize: 13, color: Colors.white45 },
   promptsSection: { paddingLeft: 40, gap: 8 },
   promptChip: { backgroundColor: Colors.white05, borderWidth: 1, borderColor: Colors.white10, borderRadius: 14, padding: 12 },
   promptChipAnswered: { borderColor: Colors.purpleBorder, backgroundColor: Colors.purpleBg },
@@ -685,3 +599,27 @@ const styles = StyleSheet.create({
   modalSaveBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12 },
   modalSaveText: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: Colors.goldText },
 });
+
+// ═══════════════════════════════════════════
+//  MAIN PROFILE SETUP SCREEN
+// ═══════════════════════════════════════════
+export default function ProfileSetupScreen() {
+  const router = useRouter();
+  const [phase, setPhase] = useState<Phase>('photos');
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
+
+  const handlePhotoContinue = () => {
+    if (photoUris.length === 0) {
+      Alert.alert('Fotograf gerekli', 'En az 1 fotograf yukle.');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPhase('chatbot');
+  };
+
+  if (phase === 'photos') {
+    return <PhotoPhase photos={photoUris} onPhotosChange={setPhotoUris} onContinue={handlePhotoContinue} />;
+  }
+
+  return <ChatbotPhase photoUris={photoUris} onFinished={() => router.replace('/(tabs)/discover')} />;
+}
