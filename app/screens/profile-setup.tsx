@@ -574,49 +574,103 @@ export default function ProfileSetupScreen() {
       const userId = session.user.id;
       const email = session.user.email || '';
 
-      // Upload photos
+      // Upload photos using base64 (more reliable on iOS than blob)
       const uploadedUrls: string[] = [];
       for (const uri of photoUris) {
         try {
-          const ext = uri.split('.').pop() || 'jpg';
+          const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
           const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+          // Read as arraybuffer for reliable upload on iOS
           const response = await fetch(uri);
-          const blob = await response.blob();
-          const { error: uploadErr } = await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${ext}` });
-          if (!uploadErr) {
+          const arrayBuffer = await response.arrayBuffer();
+
+          const { error: uploadErr } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, arrayBuffer, {
+              contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+              upsert: true,
+            });
+
+          if (uploadErr) {
+            console.warn('[Photo] Upload failed:', uploadErr.message);
+          } else {
             const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
             uploadedUrls.push(urlData.publicUrl);
           }
-        } catch {}
+        } catch (photoErr) {
+          console.warn('[Photo] Upload exception:', photoErr);
+        }
       }
 
+      console.log('[Onboarding] Photos uploaded:', uploadedUrls.length, '/', photoUris.length);
+
       const a = chatAnswers;
-      const [ageMin, ageMax] = (a.age_range || '18-80').split('-').map(Number);
+      const ageRangeParts = (a.age_range || '18-80').match(/(\d+)/g);
+      const ageMin = ageRangeParts ? parseInt(ageRangeParts[0]) : 18;
+      const ageMax = ageRangeParts && ageRangeParts[1] ? parseInt(ageRangeParts[1]) : 80;
       const promptsData = chatPrompts;
 
-      const { error: profileErr } = await supabase.from('users').upsert({
+      // Map chip labels back to DB values for seeking
+      const seekingMap: Record<string, string> = { 'Erkek': 'male', 'Kadin': 'female', 'Farketmez': 'any' };
+      const seekingRaw = (a.seeking || 'Farketmez').split(', ');
+      const seekingValues = seekingRaw.map(s => seekingMap[s] || s.toLowerCase());
+
+      // Map relationship labels
+      const relMap: Record<string, string> = {
+        'Hayat arkadasi': 'life_partner', 'Ciddi iliski': 'long_term',
+        'Kisa iliski': 'short_term', 'Kesfediyorum': 'figuring_out',
+      };
+      const relValue = relMap[a.relationship] || a.relationship?.toLowerCase() || 'figuring_out';
+
+      // Map gender labels
+      const genderMap: Record<string, string> = { 'Erkek': 'male', 'Kadin': 'female', 'Diger': 'other' };
+      const genderValue = genderMap[a.gender] || a.gender?.toLowerCase() || 'other';
+
+      // Map optional chip labels
+      const optMap: Record<string, string> = {
+        'Istiyorum': 'want', 'Istemiyorum': 'dont_want', 'Acigim': 'open', 'Emin degilim': 'not_sure',
+        'Evet': 'yes', 'Hayir': 'no', 'Bazen': 'sometimes', 'Belirtmek istemem': 'prefer_not_say',
+        'Muslim': 'muslim', 'Hristiyan': 'christian', 'Spirituel': 'spiritual',
+        'Agnostik': 'agnostic', 'Ateist': 'atheist',
+      };
+      const mapOpt = (v?: string) => !v || v === '-' ? null : (optMap[v] || v.toLowerCase());
+
+      const profileData = {
         id: userId, email,
         name: a.name, age: parseInt(a.age) || 25,
-        gender: a.gender?.toLowerCase() || 'other',
-        seeking: (a.seeking || 'any').split(', ').map(s => s.toLowerCase()),
-        city: a.city, age_min: ageMin || 18, age_max: ageMax || 80,
-        relationship_type: a.relationship?.toLowerCase() || 'figuring_out',
-        dating_intention: a.relationship?.toLowerCase() || 'figuring_out',
-        family_plans: a.family_plans !== '-' ? a.family_plans?.toLowerCase() : null,
-        religion: a.religion !== '-' ? a.religion?.toLowerCase() : null,
-        alcohol: a.alcohol !== '-' ? a.alcohol?.toLowerCase() : null,
-        smoking: a.smoking !== '-' ? a.smoking?.toLowerCase() : null,
-        education: a.education !== '-' ? a.education : null,
-        job: a.job, prompts: promptsData, photos: uploadedUrls,
-        is_discoverable: true, last_active_at: new Date().toISOString(),
-      });
-      if (profileErr) throw profileErr;
+        gender: genderValue,
+        seeking: seekingValues,
+        city: a.city, age_min: ageMin, age_max: ageMax,
+        relationship_type: relValue,
+        dating_intention: relValue,
+        family_plans: mapOpt(a.family_plans),
+        religion: mapOpt(a.religion),
+        alcohol: mapOpt(a.alcohol),
+        smoking: mapOpt(a.smoking),
+        education: a.education && a.education !== '-' ? a.education : null,
+        job: a.job || null,
+        prompts: promptsData,
+        photos: uploadedUrls,
+        is_discoverable: true,
+        last_active_at: new Date().toISOString(),
+      };
 
+      console.log('[Onboarding] Saving profile for:', userId);
+      const { error: profileErr } = await supabase.from('users').upsert(profileData);
+      if (profileErr) {
+        console.error('[Onboarding] Profile error:', JSON.stringify(profileErr));
+        Alert.alert('Hata', `Profil: ${profileErr.message}`);
+        setSaving(false);
+        return;
+      }
+
+      console.log('[Onboarding] Profile saved. Creating agent...');
       const systemPrompt = buildAgentSystemPrompt(
         a.personality || '', a.looking_for || '', a.dealbreakers || '', undefined,
-        { dating_intention: a.relationship, family_plans: a.family_plans !== '-' ? a.family_plans : undefined,
-          religion: a.religion !== '-' ? a.religion : undefined, alcohol: a.alcohol !== '-' ? a.alcohol : undefined,
-          smoking: a.smoking !== '-' ? a.smoking : undefined, education: a.education !== '-' ? a.education : undefined },
+        { dating_intention: relValue, family_plans: mapOpt(a.family_plans) || undefined,
+          religion: mapOpt(a.religion) || undefined, alcohol: mapOpt(a.alcohol) || undefined,
+          smoking: mapOpt(a.smoking) || undefined, education: a.education !== '-' ? a.education : undefined },
         promptsData,
       );
 
@@ -625,16 +679,22 @@ export default function ProfileSetupScreen() {
         looking_for: a.looking_for || '', dealbreakers: a.dealbreakers || '',
         system_prompt: systemPrompt, tags: [a.job, a.city].filter(Boolean),
       });
-      if (agentErr) throw agentErr;
+      if (agentErr) {
+        console.error('[Onboarding] Agent error:', JSON.stringify(agentErr));
+        Alert.alert('Hata', `Agent: ${agentErr.message}`);
+        setSaving(false);
+        return;
+      }
 
+      console.log('[Onboarding] Agent created. Starting match...');
       try { await supabase.functions.invoke('start-match', { body: {} }); } catch {}
       await checkAgent(userId);
       trackEvent('onboarding_complete');
 
       router.replace('/(tabs)/discover');
-    } catch (err) {
-      console.error('Finalize error:', err);
-      Alert.alert('Hata', 'Profil kaydedilemedi. Tekrar deneyin.');
+    } catch (err: any) {
+      console.error('[Onboarding] Finalize error:', err?.message || err);
+      Alert.alert('Hata', err?.message || 'Profil kaydedilemedi. Tekrar deneyin.');
       setSaving(false);
     }
   };
