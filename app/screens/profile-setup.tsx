@@ -97,10 +97,11 @@ interface ChatMessage {
 // ═══════════════════════════════════════════
 //  PHOTO PHASE COMPONENT
 // ═══════════════════════════════════════════
-function PhotoPhase({ photos, onPhotosChange, onContinue }: {
+function PhotoPhase({ photos, onPhotosChange, onContinue, saving }: {
   photos: string[];
   onPhotosChange: (p: string[]) => void;
   onContinue: () => void;
+  saving?: boolean;
 }) {
   const pickPhoto = async (index: number) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -163,7 +164,7 @@ function PhotoPhase({ photos, onPhotosChange, onContinue }: {
       </View>
 
       {/* Continue */}
-      <Pressable onPress={onContinue} disabled={photos.length === 0}>
+      <Pressable onPress={onContinue} disabled={photos.length === 0 || saving}>
         {({ pressed }) => (
           <LinearGradient
             colors={photos.length > 0 ? [Colors.gold, Colors.goldDark] : ['#333', '#222']}
@@ -171,7 +172,11 @@ function PhotoPhase({ photos, onPhotosChange, onContinue }: {
             end={{ x: 1, y: 1 }}
             style={[ps.btnPrimary, (pressed && photos.length > 0) && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
           >
-            <Text style={[ps.btnText, photos.length === 0 && { color: 'rgba(255,255,255,0.3)' }]}>Devam →</Text>
+            {saving ? (
+              <ActivityIndicator color={Colors.goldText} />
+            ) : (
+              <Text style={[ps.btnText, photos.length === 0 && { color: 'rgba(255,255,255,0.3)' }]}>Devam →</Text>
+            )}
           </LinearGradient>
         )}
       </Pressable>
@@ -207,7 +212,7 @@ const ps = StyleSheet.create({
 // ═══════════════════════════════════════════
 //  CHATBOT PHASE COMPONENT
 // ═══════════════════════════════════════════
-function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinished: () => void }) {
+function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, string>, prompts: { key: string; answer: string }[]) => void }) {
   const { user, checkAgent } = useAuthStore();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -217,7 +222,6 @@ function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinish
   const [inputText, setInputText] = useState('');
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [typing, setTyping] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(false);
 
   // Prompts
@@ -328,87 +332,10 @@ function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinish
     advanceToNext(`${selectedPrompts.length} prompt yanitlandi`);
   };
 
-  // ── FINALIZE ──
-  const finalize = async (allAnswers: Record<string, string>) => {
-    setSaving(true);
-    setMessages((prev) => [...prev, { role: 'agent', text: `Harika ${allAnswers.name || ''}! Agentin hazirlaniyor...` }]);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Oturum bulunamadi');
-      const userId = session.user.id;
-      const email = session.user.email || '';
-
-      // Upload photos
-      const uploadedUrls: string[] = [];
-      for (const uri of photoUris) {
-        try {
-          const ext = uri.split('.').pop() || 'jpg';
-          const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const response = await fetch(uri);
-          const blob = await response.blob();
-          const { error: uploadErr } = await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${ext}` });
-          if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-            uploadedUrls.push(urlData.publicUrl);
-          }
-        } catch {}
-      }
-
-      const [ageMin, ageMax] = (allAnswers.age_range || '18-80').split('-').map(Number);
-      const promptsData = selectedPrompts.map(p => ({ key: p.key, answer: p.answer }));
-
-      const { error: profileErr } = await supabase.from('users').upsert({
-        id: userId, email,
-        name: allAnswers.name,
-        age: parseInt(allAnswers.age) || 25,
-        gender: allAnswers.gender?.toLowerCase() || 'other',
-        seeking: (allAnswers.seeking || 'any').split(', ').map(s => s.toLowerCase()),
-        city: allAnswers.city,
-        age_min: ageMin || 18, age_max: ageMax || 80,
-        relationship_type: allAnswers.relationship?.toLowerCase() || 'figuring_out',
-        dating_intention: allAnswers.relationship?.toLowerCase() || 'figuring_out',
-        family_plans: allAnswers.family_plans !== '-' ? allAnswers.family_plans?.toLowerCase() : null,
-        religion: allAnswers.religion !== '-' ? allAnswers.religion?.toLowerCase() : null,
-        alcohol: allAnswers.alcohol !== '-' ? allAnswers.alcohol?.toLowerCase() : null,
-        smoking: allAnswers.smoking !== '-' ? allAnswers.smoking?.toLowerCase() : null,
-        education: allAnswers.education !== '-' ? allAnswers.education : null,
-        job: allAnswers.job,
-        prompts: promptsData,
-        photos: uploadedUrls,
-        is_discoverable: true,
-        last_active_at: new Date().toISOString(),
-      });
-      if (profileErr) throw profileErr;
-
-      const systemPrompt = buildAgentSystemPrompt(
-        allAnswers.personality || '', allAnswers.looking_for || '', allAnswers.dealbreakers || '',
-        undefined,
-        { dating_intention: allAnswers.relationship, family_plans: allAnswers.family_plans !== '-' ? allAnswers.family_plans : undefined,
-          religion: allAnswers.religion !== '-' ? allAnswers.religion : undefined,
-          alcohol: allAnswers.alcohol !== '-' ? allAnswers.alcohol : undefined,
-          smoking: allAnswers.smoking !== '-' ? allAnswers.smoking : undefined,
-          education: allAnswers.education !== '-' ? allAnswers.education : undefined },
-        promptsData,
-      );
-
-      const { error: agentErr } = await supabase.from('agents').upsert({
-        user_id: userId, personality: allAnswers.personality || '',
-        looking_for: allAnswers.looking_for || '', dealbreakers: allAnswers.dealbreakers || '',
-        system_prompt: systemPrompt, tags: [allAnswers.job, allAnswers.city].filter(Boolean),
-      });
-      if (agentErr) throw agentErr;
-
-      try { await supabase.functions.invoke('start-match', { body: {} }); } catch {}
-      await checkAgent(userId);
-      trackEvent('onboarding_complete');
-
-      setMessages((prev) => [...prev, { role: 'agent', text: 'Agentin hazir! Simdi sana en uygun kisileri bulacagim. Basarilar! 🎉' }]);
-      setTimeout(() => onFinished(), 1500);
-    } catch (err) {
-      console.error('Finalize error:', err);
-      Alert.alert('Hata', 'Profil kaydedilemedi. Tekrar deneyin.');
-      setSaving(false);
-    }
+  // ── CHATBOT DONE — pass data to parent ──
+  const finalize = (allAnswers: Record<string, string>) => {
+    setMessages((prev) => [...prev, { role: 'agent', text: `Harika ${allAnswers.name || ''}! Simdi fotograflarini ekleyelim.` }]);
+    setTimeout(() => onFinished(allAnswers, selectedPrompts), 1200);
   };
 
   const currentQ = QUESTIONS[step];
@@ -499,7 +426,7 @@ function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinish
         </ScrollView>
 
         {/* Text input */}
-        {!typing && (currentQ?.type === 'text' || currentQ?.type === 'number') && !saving && (
+        {!typing && (currentQ?.type === 'text' || currentQ?.type === 'number') && (
           <View style={cs.inputBar}>
             {currentQ.key === 'city' && (
               <Pressable onPress={detectLocation} style={cs.locationBtn} disabled={detectingLocation}>
@@ -511,7 +438,7 @@ function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinish
               value={inputText} onChangeText={setInputText} onSubmitEditing={handleTextSubmit}
               keyboardType={currentQ.type === 'number' ? 'number-pad' : 'default'}
               maxLength={currentQ.maxLength || (currentQ.type === 'number' ? 3 : currentQ.key === 'name' ? 50 : 500)}
-              multiline={!!currentQ.maxLength && currentQ.maxLength > 100} editable={!saving}
+              multiline={!!currentQ.maxLength && currentQ.maxLength > 100} editable={true}
             />
             <Pressable onPress={handleTextSubmit} disabled={!inputText.trim() && !currentQ.optional}>
               <LinearGradient colors={inputText.trim() || currentQ.optional ? [Colors.gold, Colors.goldDark] : ['#333', '#222']} style={cs.sendBtn}>
@@ -519,9 +446,6 @@ function ChatbotPhase({ photoUris, onFinished }: { photoUris: string[]; onFinish
               </LinearGradient>
             </Pressable>
           </View>
-        )}
-        {saving && (
-          <View style={cs.savingBar}><ActivityIndicator color={Colors.gold} /><Text style={cs.savingText}>Agentin hazirlaniyor...</Text></View>
         )}
       </KeyboardAvoidingView>
 
@@ -602,24 +526,106 @@ const cs = StyleSheet.create({
 
 // ═══════════════════════════════════════════
 //  MAIN PROFILE SETUP SCREEN
+//  Flow: Chatbot (steps 1-6) → Photos (step 7) → Discover (step 8)
 // ═══════════════════════════════════════════
 export default function ProfileSetupScreen() {
   const router = useRouter();
-  const [phase, setPhase] = useState<Phase>('photos');
+  const { user, checkAgent } = useAuthStore();
+  const [phase, setPhase] = useState<Phase>('chatbot');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [chatAnswers, setChatAnswers] = useState<Record<string, string>>({});
+  const [chatPrompts, setChatPrompts] = useState<{ key: string; answer: string }[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  const handlePhotoContinue = () => {
+  const handleChatbotDone = (answers: Record<string, string>, prompts: { key: string; answer: string }[]) => {
+    setChatAnswers(answers);
+    setChatPrompts(prompts);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPhase('photos');
+  };
+
+  const handlePhotoContinue = async () => {
     if (photoUris.length === 0) {
       Alert.alert('Fotograf gerekli', 'En az 1 fotograf yukle.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase('chatbot');
+    setSaving(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Oturum bulunamadi');
+      const userId = session.user.id;
+      const email = session.user.email || '';
+
+      // Upload photos
+      const uploadedUrls: string[] = [];
+      for (const uri of photoUris) {
+        try {
+          const ext = uri.split('.').pop() || 'jpg';
+          const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          const { error: uploadErr } = await supabase.storage.from('avatars').upload(fileName, blob, { contentType: `image/${ext}` });
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            uploadedUrls.push(urlData.publicUrl);
+          }
+        } catch {}
+      }
+
+      const a = chatAnswers;
+      const [ageMin, ageMax] = (a.age_range || '18-80').split('-').map(Number);
+      const promptsData = chatPrompts;
+
+      const { error: profileErr } = await supabase.from('users').upsert({
+        id: userId, email,
+        name: a.name, age: parseInt(a.age) || 25,
+        gender: a.gender?.toLowerCase() || 'other',
+        seeking: (a.seeking || 'any').split(', ').map(s => s.toLowerCase()),
+        city: a.city, age_min: ageMin || 18, age_max: ageMax || 80,
+        relationship_type: a.relationship?.toLowerCase() || 'figuring_out',
+        dating_intention: a.relationship?.toLowerCase() || 'figuring_out',
+        family_plans: a.family_plans !== '-' ? a.family_plans?.toLowerCase() : null,
+        religion: a.religion !== '-' ? a.religion?.toLowerCase() : null,
+        alcohol: a.alcohol !== '-' ? a.alcohol?.toLowerCase() : null,
+        smoking: a.smoking !== '-' ? a.smoking?.toLowerCase() : null,
+        education: a.education !== '-' ? a.education : null,
+        job: a.job, prompts: promptsData, photos: uploadedUrls,
+        is_discoverable: true, last_active_at: new Date().toISOString(),
+      });
+      if (profileErr) throw profileErr;
+
+      const systemPrompt = buildAgentSystemPrompt(
+        a.personality || '', a.looking_for || '', a.dealbreakers || '', undefined,
+        { dating_intention: a.relationship, family_plans: a.family_plans !== '-' ? a.family_plans : undefined,
+          religion: a.religion !== '-' ? a.religion : undefined, alcohol: a.alcohol !== '-' ? a.alcohol : undefined,
+          smoking: a.smoking !== '-' ? a.smoking : undefined, education: a.education !== '-' ? a.education : undefined },
+        promptsData,
+      );
+
+      const { error: agentErr } = await supabase.from('agents').upsert({
+        user_id: userId, personality: a.personality || '',
+        looking_for: a.looking_for || '', dealbreakers: a.dealbreakers || '',
+        system_prompt: systemPrompt, tags: [a.job, a.city].filter(Boolean),
+      });
+      if (agentErr) throw agentErr;
+
+      try { await supabase.functions.invoke('start-match', { body: {} }); } catch {}
+      await checkAgent(userId);
+      trackEvent('onboarding_complete');
+
+      router.replace('/(tabs)/discover');
+    } catch (err) {
+      console.error('Finalize error:', err);
+      Alert.alert('Hata', 'Profil kaydedilemedi. Tekrar deneyin.');
+      setSaving(false);
+    }
   };
 
-  if (phase === 'photos') {
-    return <PhotoPhase photos={photoUris} onPhotosChange={setPhotoUris} onContinue={handlePhotoContinue} />;
+  if (phase === 'chatbot') {
+    return <ChatbotPhase onFinished={handleChatbotDone} />;
   }
 
-  return <ChatbotPhase photoUris={photoUris} onFinished={() => router.replace('/(tabs)/discover')} />;
+  return <PhotoPhase photos={photoUris} onPhotosChange={setPhotoUris} onContinue={handlePhotoContinue} saving={saving} />;
 }
