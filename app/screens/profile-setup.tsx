@@ -48,6 +48,10 @@ const QUESTIONS: Question[] = [
     { value: 'life_partner', label: 'Hayat arkadasi' }, { value: 'long_term', label: 'Ciddi iliski' },
     { value: 'short_term', label: 'Kisa iliski' }, { value: 'figuring_out', label: 'Kesfediyorum' },
   ]},
+  { key: 'monogamy', agentText: 'Iliski yapisin nasil tercih edersin?', type: 'chips', options: [
+    { value: 'monogamous', label: 'Monogami' }, { value: 'non_monogamous', label: 'Non-monogami' },
+    { value: 'open_to_both', label: 'Her ikisine acigim' }, { value: 'prefer_not_say', label: 'Belirtmek istemem' },
+  ]},
   { key: 'family_plans', agentText: 'Cocuk/aile planlarin nedir?', type: 'chips', optional: true, options: [
     { value: 'want', label: 'Istiyorum' }, { value: 'dont_want', label: 'Istemiyorum' },
     { value: 'open', label: 'Acigim' }, { value: 'not_sure', label: 'Emin degilim' },
@@ -675,6 +679,8 @@ export default function ProfileSetupScreen() {
         'Evet': 'yes', 'Hayir': 'no', 'Bazen': 'sometimes', 'Belirtmek istemem': 'prefer_not_say',
         'Muslim': 'muslim', 'Hristiyan': 'christian', 'Spirituel': 'spiritual',
         'Agnostik': 'agnostic', 'Ateist': 'atheist',
+        'Monogami': 'monogamous', 'Non-monogami': 'non_monogamous', 'Her ikisine acigim': 'open_to_both',
+        'Lise': 'high_school', 'Universite': 'university', 'Yuksek Lisans': 'masters', 'Doktora': 'doctorate',
       };
       const mapOpt = (v?: string) => !v || v === '-' ? null : (optMap[v] || v.toLowerCase());
 
@@ -686,6 +692,7 @@ export default function ProfileSetupScreen() {
         city: a.city, age_min: ageMin, age_max: ageMax,
         relationship_type: relValue,
         dating_intention: relValue,
+        monogamy: mapOpt(a.monogamy),
         family_plans: mapOpt(a.family_plans),
         religion: mapOpt(a.religion),
         alcohol: mapOpt(a.alcohol),

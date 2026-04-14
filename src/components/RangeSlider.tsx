@@ -1,11 +1,6 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  runOnJS,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Colors, Fonts } from '../theme';
 
 interface RangeSliderProps {
@@ -17,115 +12,76 @@ interface RangeSliderProps {
   onValueChange: (low: number, high: number) => void;
 }
 
-const THUMB_SIZE = 28;
-const TRACK_HEIGHT = 4;
-const TOOLTIP_WIDTH = 40;
-
 export default function RangeSlider({
   min, max, initialLow, initialHigh, step = 1, onValueChange,
 }: RangeSliderProps) {
-  const [trackWidth, setTrackWidth] = useState(0);
-  const [lowVal, setLowVal] = useState(initialLow);
-  const [highVal, setHighVal] = useState(initialHigh);
+  const [low, setLow] = useState(initialLow);
+  const [high, setHigh] = useState(initialHigh);
 
-  const lowPos = useSharedValue(0);
-  const highPos = useSharedValue(0);
-  const lowStart = useSharedValue(0);
-  const highStart = useSharedValue(0);
-
-  const valueToPos = useCallback((val: number) => {
-    if (trackWidth === 0) return 0;
-    return ((val - min) / (max - min)) * trackWidth;
-  }, [trackWidth, min, max]);
-
-  const posToValue = useCallback((pos: number) => {
-    if (trackWidth === 0) return min;
-    const raw = min + (pos / trackWidth) * (max - min);
-    return Math.round(raw / step) * step;
-  }, [trackWidth, min, max, step]);
-
-  const onLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width - THUMB_SIZE;
-    setTrackWidth(w);
-    lowPos.value = ((initialLow - min) / (max - min)) * w;
-    highPos.value = ((initialHigh - min) / (max - min)) * w;
+  const update = (newLow: number, newHigh: number) => {
+    setLow(newLow);
+    setHigh(newHigh);
+    onValueChange(newLow, newHigh);
+    Haptics.selectionAsync();
   };
 
-  const updateLow = (val: number) => {
-    setLowVal(val);
-    onValueChange(val, highVal);
-  };
+  const decLow = () => { if (low - step >= min) update(low - step, high); };
+  const incLow = () => { if (low + step < high) update(low + step, high); };
+  const decHigh = () => { if (high - step > low) update(low, high - step); };
+  const incHigh = () => { if (high + step <= max) update(low, high + step); };
 
-  const updateHigh = (val: number) => {
-    setHighVal(val);
-    onValueChange(lowVal, val);
-  };
-
-  const lowGesture = Gesture.Pan()
-    .onStart(() => { lowStart.value = lowPos.value; })
-    .onUpdate((e) => {
-      let newPos = lowStart.value + e.translationX;
-      newPos = Math.max(0, Math.min(newPos, highPos.value - THUMB_SIZE * 0.5));
-      lowPos.value = newPos;
-      const val = posToValue(newPos);
-      runOnJS(updateLow)(val);
-    });
-
-  const highGesture = Gesture.Pan()
-    .onStart(() => { highStart.value = highPos.value; })
-    .onUpdate((e) => {
-      let newPos = highStart.value + e.translationX;
-      newPos = Math.max(lowPos.value + THUMB_SIZE * 0.5, Math.min(newPos, trackWidth));
-      highPos.value = newPos;
-      const val = posToValue(newPos);
-      runOnJS(updateHigh)(val);
-    });
-
-  const lowThumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: lowPos.value }],
-  }));
-
-  const highThumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: highPos.value }],
-  }));
-
-  const fillStyle = useAnimatedStyle(() => ({
-    left: lowPos.value + THUMB_SIZE / 2,
-    width: highPos.value - lowPos.value,
-  }));
+  // Calculate fill percentage for visual bar
+  const fillLeft = ((low - min) / (max - min)) * 100;
+  const fillWidth = ((high - low) / (max - min)) * 100;
 
   return (
-    <View style={styles.container} onLayout={onLayout}>
-      {/* Labels */}
-      <View style={styles.labelRow}>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.headerRow}>
         <Text style={styles.label}>Yas Araligi</Text>
-        <Text style={styles.valueText}>{lowVal} - {highVal}</Text>
+        <Text style={styles.valueText}>{low} — {high}</Text>
       </View>
 
-      {/* Track */}
-      <View style={styles.trackContainer}>
-        <View style={styles.track} />
-        <Animated.View style={[styles.fill, fillStyle]} />
+      {/* Visual bar */}
+      <View style={styles.trackRow}>
+        <View style={styles.track}>
+          <View style={[styles.fill, { left: `${fillLeft}%`, width: `${fillWidth}%` }]} />
+        </View>
+      </View>
 
-        {/* Low thumb */}
-        <GestureDetector gesture={lowGesture}>
-          <Animated.View style={[styles.thumbWrap, lowThumbStyle]}>
-            <View style={styles.tooltip}>
-              <Text style={styles.tooltipText}>{lowVal}</Text>
+      {/* Stepper controls */}
+      <View style={styles.steppersRow}>
+        {/* Low control */}
+        <View style={styles.stepper}>
+          <Text style={styles.stepperLabel}>Min</Text>
+          <View style={styles.stepperBtns}>
+            <Pressable onPress={decLow} style={styles.stepBtn}>
+              <Text style={styles.stepBtnText}>−</Text>
+            </Pressable>
+            <View style={styles.stepValue}>
+              <Text style={styles.stepValueText}>{low}</Text>
             </View>
-            <View style={styles.thumb} />
-          </Animated.View>
-        </GestureDetector>
+            <Pressable onPress={incLow} style={styles.stepBtn}>
+              <Text style={styles.stepBtnText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
 
-        {/* High thumb */}
-        <GestureDetector gesture={highGesture}>
-          <Animated.View style={[styles.thumbWrap, highThumbStyle]}>
-            <View style={styles.tooltip}>
-              <Text style={styles.tooltipText}>{highVal}</Text>
+        {/* High control */}
+        <View style={styles.stepper}>
+          <Text style={styles.stepperLabel}>Max</Text>
+          <View style={styles.stepperBtns}>
+            <Pressable onPress={decHigh} style={styles.stepBtn}>
+              <Text style={styles.stepBtnText}>−</Text>
+            </Pressable>
+            <View style={styles.stepValue}>
+              <Text style={styles.stepValueText}>{high}</Text>
             </View>
-            <View style={styles.thumb} />
-          </Animated.View>
-        </GestureDetector>
+            <Pressable onPress={incHigh} style={styles.stepBtn}>
+              <Text style={styles.stepBtnText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
 
       {/* Min/Max labels */}
@@ -138,89 +94,29 @@ export default function RangeSlider({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+  container: { paddingVertical: 8 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  label: { fontFamily: Fonts.bodyMedium, fontSize: 14, color: Colors.white85 },
+  valueText: { fontFamily: Fonts.bodySemiBold, fontSize: 15, color: Colors.gold },
+  trackRow: { marginBottom: 16 },
+  track: { height: 4, backgroundColor: Colors.white10, borderRadius: 99, overflow: 'hidden' },
+  fill: { position: 'absolute', height: '100%', backgroundColor: Colors.gold, borderRadius: 99 },
+  steppersRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
+  stepper: { flex: 1, alignItems: 'center', gap: 6 },
+  stepperLabel: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white30, textTransform: 'uppercase', letterSpacing: 0.5 },
+  stepperBtns: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  stepBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: Colors.white06, borderWidth: 1, borderColor: Colors.white10,
+    alignItems: 'center', justifyContent: 'center',
   },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+  stepBtnText: { fontSize: 20, color: Colors.gold, fontWeight: '500', marginTop: -2 },
+  stepValue: {
+    minWidth: 48, height: 38, borderRadius: 12,
+    backgroundColor: 'rgba(232,184,109,0.08)', borderWidth: 1, borderColor: Colors.goldBorder,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
   },
-  label: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
-    color: Colors.white85,
-  },
-  valueText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
-    color: Colors.gold,
-  },
-  trackContainer: {
-    height: THUMB_SIZE + 30,
-    justifyContent: 'flex-end',
-    paddingBottom: THUMB_SIZE / 2 - TRACK_HEIGHT / 2,
-  },
-  track: {
-    position: 'absolute',
-    left: THUMB_SIZE / 2,
-    right: THUMB_SIZE / 2,
-    bottom: THUMB_SIZE / 2 - TRACK_HEIGHT / 2,
-    height: TRACK_HEIGHT,
-    borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: Colors.white10,
-  },
-  fill: {
-    position: 'absolute',
-    bottom: THUMB_SIZE / 2 - TRACK_HEIGHT / 2,
-    height: TRACK_HEIGHT,
-    borderRadius: TRACK_HEIGHT / 2,
-    backgroundColor: Colors.gold,
-  },
-  thumbWrap: {
-    position: 'absolute',
-    bottom: 0,
-    width: THUMB_SIZE,
-    alignItems: 'center',
-  },
-  thumb: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    backgroundColor: Colors.gold,
-    borderWidth: 3,
-    borderColor: Colors.surface,
-    shadowColor: Colors.gold,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  tooltip: {
-    backgroundColor: 'rgba(40,40,60,0.95)',
-    borderRadius: 8,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    marginBottom: 6,
-    minWidth: TOOLTIP_WIDTH,
-    alignItems: 'center',
-  },
-  tooltipText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
-    color: Colors.white,
-  },
-  minMaxRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-    paddingHorizontal: THUMB_SIZE / 2 - 4,
-  },
-  minMaxText: {
-    fontFamily: Fonts.body,
-    fontSize: 11,
-    color: Colors.white30,
-  },
+  stepValueText: { fontFamily: Fonts.bodySemiBold, fontSize: 16, color: Colors.gold },
+  minMaxRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  minMaxText: { fontFamily: Fonts.body, fontSize: 11, color: Colors.white30 },
 });
