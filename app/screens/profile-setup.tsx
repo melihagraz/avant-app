@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Colors, Fonts, Typography } from '../../src/theme';
+import RangeSlider from '../../src/components/RangeSlider';
 import { useAuthStore } from '../../src/stores/authStore';
 import { supabase } from '../../src/lib/supabase';
 import { buildAgentSystemPrompt } from '../../src/lib/agentPrompt';
@@ -25,7 +26,7 @@ type Phase = 'photos' | 'chatbot';
 interface Question {
   key: string;
   agentText: string | ((a: Record<string, string>) => string);
-  type: 'text' | 'number' | 'chips' | 'chips_multi' | 'prompts';
+  type: 'text' | 'number' | 'chips' | 'chips_multi' | 'prompts' | 'age_range';
   placeholder?: string;
   options?: { value: string; label: string }[];
   optional?: boolean;
@@ -42,7 +43,7 @@ const QUESTIONS: Question[] = [
     { value: 'male', label: 'Erkek' }, { value: 'female', label: 'Kadin' }, { value: 'any', label: 'Farketmez' },
   ]},
   { key: 'city', agentText: 'Hangi sehirdesin?', type: 'text', placeholder: 'Istanbul...' },
-  { key: 'age_range', agentText: 'Hangi yas araligini tercih edersin? (Ornek: 25-35)', type: 'text', placeholder: '25-40' },
+  { key: 'age_range', agentText: 'Hangi yas araligini tercih edersin?', type: 'age_range' },
   { key: 'relationship', agentText: 'Ne tur bir iliski ariyorsun?', type: 'chips', options: [
     { value: 'life_partner', label: 'Hayat arkadasi' }, { value: 'long_term', label: 'Ciddi iliski' },
     { value: 'short_term', label: 'Kisa iliski' }, { value: 'figuring_out', label: 'Kesfediyorum' },
@@ -243,6 +244,7 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
 
   // Use ref to always have latest answers for agent text generation
   const answersRef = useRef<Record<string, string>>({});
+  const rangeRef = useRef({ low: 24, high: 38 });
 
   const getQuestionText = (q: Question, currentAnswers: Record<string, string>): string => {
     if (typeof q.agentText === 'function') return q.agentText(currentAnswers);
@@ -418,6 +420,30 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
             </View>
           )}
 
+          {/* Age Range Slider */}
+          {!typing && currentQ?.type === 'age_range' && (
+            <View style={cs.sliderWrap}>
+              <RangeSlider
+                min={18}
+                max={65}
+                initialLow={24}
+                initialHigh={38}
+                step={1}
+                onValueChange={(low, high) => {
+                  rangeRef.current = { low, high };
+                }}
+              />
+              <Pressable onPress={() => {
+                const { low, high } = rangeRef.current;
+                advanceToNext(`${low}-${high}`);
+              }}>
+                <LinearGradient colors={[Colors.gold, Colors.goldDark]} style={cs.continueBtn}>
+                  <Text style={cs.continueBtnText}>Devam →</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          )}
+
           {/* Prompts */}
           {!typing && currentQ?.type === 'prompts' && (
             <View style={cs.promptsSection}>
@@ -526,6 +552,7 @@ const cs = StyleSheet.create({
   chipText: { fontFamily: Fonts.bodyMedium, fontSize: 13, color: Colors.white80 },
   continueBtn: { height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 24 },
   continueBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: Colors.goldText },
+  sliderWrap: { paddingLeft: 40, paddingRight: 8, gap: 8 },
   promptsSection: { paddingLeft: 40, gap: 8 },
   promptChip: { backgroundColor: Colors.white05, borderWidth: 1, borderColor: Colors.white10, borderRadius: 14, padding: 12 },
   promptChipAnswered: { borderColor: Colors.purpleBorder, backgroundColor: Colors.purpleBg },
