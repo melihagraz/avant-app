@@ -88,7 +88,7 @@ export default function ProfileScreen() {
 
           <LinearGradient colors={['transparent', Colors.surface]} start={{ x: 0.5, y: 0.45 }} end={{ x: 0.5, y: 1 }} style={styles.heroOverlay} />
 
-          <Pressable style={styles.editBtn}>
+          <Pressable style={styles.editBtn} onPress={() => router.push('/screens/profile-setup')}>
             <Text style={styles.editBtnText}>Duzenle</Text>
           </Pressable>
 
