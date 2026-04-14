@@ -42,10 +42,7 @@ const QUESTIONS: Question[] = [
     { value: 'male', label: 'Erkek' }, { value: 'female', label: 'Kadin' }, { value: 'any', label: 'Farketmez' },
   ]},
   { key: 'city', agentText: 'Hangi sehirdesin?', type: 'text', placeholder: 'Istanbul...' },
-  { key: 'age_range', agentText: 'Hangi yas araligini tercih edersin?', type: 'chips', options: [
-    { value: '18-25', label: '18-25' }, { value: '23-30', label: '23-30' }, { value: '28-38', label: '28-38' },
-    { value: '35-50', label: '35-50' }, { value: '18-80', label: 'Farketmez' },
-  ]},
+  { key: 'age_range', agentText: 'Hangi yas araligini tercih edersin? (Ornek: 25-35)', type: 'text', placeholder: '25-40' },
   { key: 'relationship', agentText: 'Ne tur bir iliski ariyorsun?', type: 'chips', options: [
     { value: 'life_partner', label: 'Hayat arkadasi' }, { value: 'long_term', label: 'Ciddi iliski' },
     { value: 'short_term', label: 'Kisa iliski' }, { value: 'figuring_out', label: 'Kesfediyorum' },
@@ -67,7 +64,10 @@ const QUESTIONS: Question[] = [
     { value: 'yes', label: 'Evet' }, { value: 'no', label: 'Hayir' },
     { value: 'sometimes', label: 'Bazen' }, { value: 'prefer_not_say', label: 'Belirtmek istemem' },
   ]},
-  { key: 'education', agentText: 'Egitim seviyeni paylasir misin?', type: 'text', optional: true, placeholder: 'Universite, Yuksek lisans...' },
+  { key: 'education', agentText: 'Egitim seviyen nedir?', type: 'chips', optional: true, options: [
+    { value: 'Lise', label: 'Lise' }, { value: 'Universite', label: 'Universite' },
+    { value: 'Yuksek Lisans', label: 'Yuksek Lisans' }, { value: 'Doktora', label: 'Doktora' },
+  ]},
   { key: 'job', agentText: 'Ne is yapiyorsun?', type: 'text', placeholder: 'Meslegin...' },
   { key: 'interests', agentText: (a) => `Guzel ${a.name}! Ilgi alanlarini ve hobilerini sec. Birden fazla secebilirsin.`, type: 'chips_multi', options: [
     { value: 'Seyahat', label: '✈️ Seyahat' }, { value: 'Fotograf', label: '📸 Fotograf' },
@@ -239,17 +239,21 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
   const [promptAnswer, setPromptAnswer] = useState('');
 
-  useEffect(() => { showAgentMessage(0); }, []);
+  useEffect(() => { showAgentMessage(0, {}); }, []);
 
-  const getQuestionText = (q: Question): string => {
-    if (typeof q.agentText === 'function') return q.agentText(answers);
+  // Use ref to always have latest answers for agent text generation
+  const answersRef = useRef<Record<string, string>>({});
+
+  const getQuestionText = (q: Question, currentAnswers: Record<string, string>): string => {
+    if (typeof q.agentText === 'function') return q.agentText(currentAnswers);
     return q.agentText;
   };
 
-  const showAgentMessage = (qi: number) => {
+  const showAgentMessage = (qi: number, currentAnswers: Record<string, string>) => {
     setTyping(true);
     setTimeout(() => {
-      setMessages((prev) => [...prev, { role: 'agent', text: getQuestionText(QUESTIONS[qi]) }]);
+      const text = getQuestionText(QUESTIONS[qi], currentAnswers);
+      setMessages((prev) => [...prev, { role: 'agent', text }]);
       setTyping(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }, 800);
@@ -258,7 +262,8 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
   const advanceToNext = (answer: string) => {
     const q = QUESTIONS[step];
     setMessages((prev) => [...prev, { role: 'user', text: answer }]);
-    const newAnswers = { ...answers, [q.key]: answer };
+    const newAnswers = { ...answersRef.current, [q.key]: answer };
+    answersRef.current = newAnswers;
     setAnswers(newAnswers);
     setInputText('');
     setSelectedChips([]);
@@ -269,7 +274,7 @@ function ChatbotPhase({ onFinished }: { onFinished: (answers: Record<string, str
       return;
     }
     setStep(nextStep);
-    showAgentMessage(nextStep);
+    showAgentMessage(nextStep, newAnswers);
   };
 
   const handleTextSubmit = () => {
@@ -689,7 +694,7 @@ export default function ProfileSetupScreen() {
         user_id: userId, personality: a.personality || '',
         looking_for: a.looking_for || '', dealbreakers: a.dealbreakers || '',
         system_prompt: systemPrompt, tags: [a.job, a.city].filter(Boolean),
-      });
+      }, { onConflict: 'user_id' });
       if (agentErr) {
         console.error('[Onboarding] Agent error:', JSON.stringify(agentErr));
         Alert.alert('Hata', `Agent: ${agentErr.message}`);
