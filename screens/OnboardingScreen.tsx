@@ -511,7 +511,8 @@ export default function OnboardingScreen({ navigation }: any) {
         finalAnswers.dealbreakers,
         undefined,
         profileContext,
-        userPrompts
+        userPrompts,
+        'Aria'
       );
 
       await supabase.from('agents').upsert({
@@ -521,10 +522,12 @@ export default function OnboardingScreen({ navigation }: any) {
         dealbreakers: finalAnswers.dealbreakers,
         system_prompt: systemPrompt,
         tags: [finalAnswers.job, finalAnswers.city].filter(Boolean),
+        name: 'Aria',
+        avatar_emoji: '\u{1F916}',
       });
 
       await supabase.functions.invoke('start-match', { body: { user_id: user.id } });
-      navigation.replace('Main');
+      navigation.replace('AgentNaming');
     } catch (err) {
       captureError(err, { context: 'onboarding_finalize' });
       setSaving(false);

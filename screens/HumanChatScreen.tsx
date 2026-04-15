@@ -17,6 +17,7 @@ import { moderateText, getModerationMessage } from '../lib/moderation';
 import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
 import { FONT_BODY_SEMIBOLD } from '../lib/fonts';
 import ChatAgentPanel from '../components/ChatAgentPanel';
+import { useAgent } from '../lib/useAgent';
 
 interface Message {
   id: string;
@@ -30,6 +31,7 @@ export default function HumanChatScreen({ route, navigation }: any) {
   const { matchId, otherUser } = route.params;
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { agent } = useAgent();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [myUserId, setMyUserId] = useState('');
@@ -245,7 +247,7 @@ export default function HumanChatScreen({ route, navigation }: any) {
               onPress={() => setShowAgentPanel(!showAgentPanel)}
             >
               <Ionicons name="sparkles" size={12} color="#C09AFF" />
-              <Text style={s.agentBtnText}>Agent</Text>
+              <Text style={s.agentBtnText}>{agent?.name || 'Agent'}</Text>
             </TouchableOpacity>
           </View>
 

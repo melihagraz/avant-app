@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { captureError } from '../lib/sentry';
 import { FONT_BODY_SEMIBOLD } from '../lib/fonts';
+import { useAgent } from '../lib/useAgent';
 
 interface Suggestion {
   emoji: string;
@@ -31,6 +32,7 @@ export default function ChatAgentPanel({
   onClose,
   onSelectSuggestion,
 }: Props) {
+  const { agent } = useAgent();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -102,7 +104,9 @@ export default function ChatAgentPanel({
           {/* Header */}
           <View style={s.header}>
             <View style={s.headerDot} />
-            <Text style={s.headerTitle}>AGENT ASISTAN — PREMIUM</Text>
+            <Text style={s.headerTitle}>
+              {agent?.name ? `${agent.name.toUpperCase()} — PREMIUM` : 'AGENT ASISTAN — PREMIUM'}
+            </Text>
             <TouchableOpacity onPress={onClose} style={s.closeBtn}>
               <Ionicons name="close" size={16} color="rgba(160,100,255,0.6)" />
             </TouchableOpacity>

@@ -90,7 +90,8 @@ export function buildAgentSystemPrompt(
   dealbreakers: string,
   communicationStyle?: string,
   profileContext?: ProfileContext,
-  prompts?: UserPrompt[]
+  prompts?: UserPrompt[],
+  agentName?: string
 ): string {
   const safePersonality = sanitizePromptInput(personality);
   const safeLookingFor = sanitizePromptInput(lookingFor);
@@ -98,8 +99,9 @@ export function buildAgentSystemPrompt(
   const safeCommStyle = communicationStyle ? sanitizePromptInput(communicationStyle) : '';
   const profileSection = buildProfileContextSection(profileContext);
   const promptsSection = buildPromptsSection(prompts);
+  const safeName = agentName ? sanitizePromptInput(agentName).substring(0, 30) : 'Aria';
 
-  return `Sen bir dating uygulamasında kullanıcının AI temsilcisisin. Adın "agent".
+  return `Sen bir dating uygulamasında kullanıcının AI temsilcisisin. Adın "${safeName}".
 
 Görevin: Başka bir kullanıcının agentıyla doğal bir sohbet yaparak uyumlu olup olmadığınızı anlamak.
 

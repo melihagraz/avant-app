@@ -14,6 +14,7 @@ import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { FONT_HEADING } from '../lib/fonts';
+import { useAgent } from '../lib/useAgent';
 import SwipeDeck from '../components/SwipeDeck';
 import DiscoverProfileCard, { DiscoverProfile } from '../components/DiscoverProfileCard';
 import SuperLikeModal from '../components/SuperLikeModal';
@@ -23,6 +24,7 @@ const FREE_LIKES_PER_DAY = 15;
 export default function DiscoverScreen({ navigation }: any) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const { agent } = useAgent();
 
   const [profiles, setProfiles] = useState<DiscoverProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +209,9 @@ export default function DiscoverScreen({ navigation }: any) {
                 style={[s.agentPill, { borderColor: colors.accentPurple }]}
               >
                 <Animated.View style={[s.pulsingDot, { opacity: pulseAnim, backgroundColor: colors.accentPurple }]} />
-                <Text style={[s.agentPillText, { color: colors.accentPurple }]}>Agent Match</Text>
+                <Text style={[s.agentPillText, { color: colors.accentPurple }]}>
+                  {agent?.name ? `${agent.name} Match` : 'Agent Match'}
+                </Text>
                 <View style={[s.proBadge, { backgroundColor: colors.accentPurple }]}>
                   <Text style={s.proBadgeText}>PRO</Text>
                 </View>

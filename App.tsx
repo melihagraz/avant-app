@@ -33,6 +33,7 @@ import AgentMatchesScreen from './screens/AgentMatchesScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import AgentMatchScreen from './screens/AgentMatchScreen';
 import FilterScreen from './screens/FilterScreen';
+import AgentNamingScreen from './screens/AgentNamingScreen';
 
 initSentry();
 
@@ -204,6 +205,7 @@ function AppContent() {
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        <Stack.Screen name="AgentNaming" component={AgentNamingScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="Explore" component={ExploreScreen} />
         <Stack.Screen name="AgentMatches" component={AgentMatchesScreen} />

@@ -13,6 +13,7 @@ import { useTheme } from '../lib/theme';
 import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { FONT_HEADING, FONT_BODY_SEMIBOLD } from '../lib/fonts';
+import { useAgent } from '../lib/useAgent';
 
 interface AgentMessage {
   role: string;
@@ -24,6 +25,7 @@ export default function AgentMatchScreen({ route, navigation }: any) {
   const { matchId, otherUserId, otherUser: passedUser } = route.params || {};
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { agent: myAgent } = useAgent();
 
   const [loading, setLoading] = useState(true);
   const [otherUser, setOtherUser] = useState<any>(passedUser || null);
@@ -148,7 +150,9 @@ export default function AgentMatchScreen({ route, navigation }: any) {
                 )}
               </View>
             </View>
-            <Text style={s.pairNames}>Senin Agent'in {'\u00B7'} {otherUser?.name}'in Agent'i</Text>
+            <Text style={s.pairNames}>
+              {myAgent?.name || 'Senin Agent\'in'} {'\u00B7'} {otherUser?.name}'in Agent'i
+            </Text>
           </View>
 
           {/* Compatibility score card */}
@@ -190,7 +194,9 @@ export default function AgentMatchScreen({ route, navigation }: any) {
                 return (
                   <View key={i} style={[s.agentMsg, isA ? s.agentMsgLeft : s.agentMsgRight]}>
                     <Text style={s.agentMsgHeader}>
-                      {isA ? "SENIN AGENT'IN" : `${otherUser?.name?.toUpperCase()}'IN AGENT'I`}
+                      {isA
+                        ? (myAgent?.name?.toUpperCase() || "SENIN AGENT'IN")
+                        : `${otherUser?.name?.toUpperCase()}'IN AGENT'I`}
                     </Text>
                     <View style={[s.agentBubble, isA ? s.agentBubbleA : s.agentBubbleB]}>
                       <Text style={s.agentBubbleText}>{msg.content}</Text>

@@ -21,6 +21,7 @@ import { trackEvent } from '../lib/analytics';
 import { captureError } from '../lib/sentry';
 import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
 import { FONT_HEADING, FONT_BODY_SEMIBOLD } from '../lib/fonts';
+import AgentCard from '../components/AgentCard';
 
 const PREMIUM_PRODUCT_ID = 'com.avant.dating.premium.monthly.v1';
 
@@ -462,6 +463,9 @@ export default function ProfileScreen({ navigation }: any) {
 
         {/* ===== CONTENT AREA ===== */}
         <View style={s.content}>
+
+          {/* ===== AGENT CARD ===== */}
+          <AgentCard />
 
           {/* ===== PROFILE STRENGTH CARD ===== */}
           <View style={s.strengthCard}>
