@@ -14,6 +14,9 @@ import { cacheMessages, getCachedMessages, useOnlineStatus } from '../lib/offlin
 import { queueMessage } from '../lib/syncQueue';
 import { moderateText, getModerationMessage } from '../lib/moderation';
 import { canPerformAction, getRemainingCooldown } from '../lib/rateLimit';
+import { fetchMatchInsights, type MatchInsights } from '../lib/matchInsights';
+import StarterCards from '../components/StarterCards';
+import ContextTags from '../components/ContextTags';
 
 interface Message {
   id: string;
@@ -31,6 +34,8 @@ export default function HumanChatScreen({ route, navigation }: any) {
   const [input, setInput] = useState('');
   const [myUserId, setMyUserId] = useState('');
   const [matchScore, setMatchScore] = useState<number | null>(null);
+  const [insights, setInsights] = useState<MatchInsights | null>(null);
+  const [startersDismissed, setStartersDismissed] = useState(false);
   const listRef = useRef<FlatList>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -48,6 +53,7 @@ export default function HumanChatScreen({ route, navigation }: any) {
       if (user) setMyUserId(user.id);
       await fetchMessages();
       await fetchMatchScore();
+      fetchInsights();
       unsubscribeRef.current?.();
       unsubscribeRef.current = subscribeToMessages();
     } catch (err) {
@@ -70,6 +76,21 @@ export default function HumanChatScreen({ route, navigation }: any) {
       const cached = await getCachedMessages(matchId);
       if (cached.length > 0) setMessages(cached);
     }
+  };
+
+  const fetchInsights = async () => {
+    const data = await fetchMatchInsights(matchId);
+    if (data) setInsights(data);
+  };
+
+  const pickStarter = (text: string) => {
+    setInput(text);
+    trackEvent('starter_picked', { match_id: matchId });
+  };
+
+  const pickTag = (tag: { label: string }) => {
+    // Tag tapped → seed the input with a gentle opener referencing the topic.
+    setInput((cur) => (cur ? cur : t('contextTags.seed', { topic: tag.label })));
   };
 
   const fetchMatchScore = async () => {
@@ -255,6 +276,10 @@ export default function HumanChatScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
 
+          {insights && insights.tags.length > 0 && (
+            <ContextTags tags={insights.tags} onPick={pickTag} />
+          )}
+
           <FlatList
             ref={listRef}
             data={messages}
@@ -263,12 +288,21 @@ export default function HumanChatScreen({ route, navigation }: any) {
             contentContainerStyle={s.list}
             onContentSizeChange={() => listRef.current?.scrollToEnd()}
             ListHeaderComponent={
-              <View style={s.matchBanner}>
-                <View style={[s.bannerPill, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-                  <Text style={[s.matchBannerText, { color: colors.textSecondary }]}>
-                    {t('chat.banner')}
-                  </Text>
+              <View>
+                <View style={s.matchBanner}>
+                  <View style={[s.bannerPill, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                    <Text style={[s.matchBannerText, { color: colors.textSecondary }]}>
+                      {t('chat.banner')}
+                    </Text>
+                  </View>
                 </View>
+                {messages.length === 0 && !startersDismissed && insights && insights.starters.length > 0 && (
+                  <StarterCards
+                    starters={insights.starters}
+                    onPick={pickStarter}
+                    onDismiss={() => setStartersDismissed(true)}
+                  />
+                )}
               </View>
             }
           />

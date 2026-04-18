@@ -53,7 +53,26 @@
     "compatibilityScore": "{{score}} uyum",
     "sayHi": "Merhaba de 💬",
     "viewProfile": "Profili gör",
+    "viewHighlights": "Ajanların ne keşfettiğini gör",
     "notNow": "Şimdilik kapat"
+  },
+
+  "highlightReel": {
+    "header": "Ajan Özeti",
+    "headerWithName": "{{name}} ile Ajan Özeti",
+    "tapHint": "Dokunarak geç"
+  },
+
+  "starterCards": {
+    "header": "Hazır paslar",
+    "sub": "Ajanların ortak noktalardan yola çıktı. Birini seç ya da kendin yaz.",
+    "basedOn": "{{topic}} üzerinden",
+    "dismiss": "Kendim başlayayım"
+  },
+
+  "contextTags": {
+    "caption": "Ajanların konuştu",
+    "seed": "{{topic}} hakkında konuşmak istiyordum..."
   },
 
   "swipe": {

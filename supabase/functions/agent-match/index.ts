@@ -154,6 +154,129 @@ function buildMessagesForAgent(
   return mapped;
 }
 
+interface MatchInsights {
+  highlights: Array<{
+    type: "common" | "spark" | "difference" | "surprise" | "score";
+    emoji: string;
+    title: string;
+    detail: string;
+  }>;
+  starters: Array<{
+    text: string;
+    based_on: string;
+  }>;
+  tags: Array<{
+    emoji: string;
+    label: string;
+  }>;
+}
+
+const INSIGHTS_SYSTEM_PROMPT = `Sen iki dating agentinin konusmasini analiz edip, eslesmis kullanicilara gosterilecek icerik ureten bir asistansin.
+
+Gorevin: Asagidaki konusmadan UC sey cikar ve SADECE JSON dondur (baska metin yok):
+1. highlights: 3-4 kart (Stories tarzi). Her kart bir "an"i temsil eder.
+   - type: "common" (ortak nokta), "spark" (kivilcim/pozitif an), "difference" (eglenceli farklilik), "surprise" (supriz bilgi), "score" (uyum ozeti)
+   - emoji: 1 emoji
+   - title: 3-5 kelime baslik
+   - detail: 1-2 cumle, konusmaya ozgu somut detay. Genel ifade yok.
+2. starters: 3 konusma baslatici mesaj. Kullanici kopyalayip gondrebilecegi. Kisa, samimi, konusmaya ozgu.
+   - text: mesaj metni (emoji olabilir)
+   - based_on: hangi ortak noktadan turedi (kisa etiket)
+3. tags: 4-6 kucuk etiket, konusmada gecen konular.
+   - emoji: 1 emoji
+   - label: 1-2 kelime
+
+Kritik kurallar:
+- Konusmada ACIKCA gecmeyen sey uretme.
+- Genel/klise ifadeler ("ikiniz de hayati seviyorsunuz") yasak.
+- Somut, spesifik, konusmadaki detaylar.
+- Turkce yaz.
+- Sadece JSON dondur, {"highlights": [...], "starters": [...], "tags": [...]}`;
+
+async function generateMatchInsights(args: {
+  matchId: string;
+  conversationId: string;
+  messages: Message[];
+  model: string;
+}) {
+  const { matchId, conversationId, messages, model } = args;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+  // Build a compact transcript for the analysis prompt.
+  const transcript = messages
+    .map((m) => `${m.speaker === "agent_a" ? "A" : "B"}: ${m.content}`)
+    .join("\n");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  let raw = "";
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1200,
+        system: INSIGHTS_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: transcript }],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json();
+    if (!response.ok || !data.content?.[0]?.text) {
+      console.error("Insights API error:", response.status, data);
+      return;
+    }
+    raw = data.content[0].text;
+  } catch (err) {
+    clearTimeout(timeout);
+    console.error("Insights fetch error:", err);
+    return;
+  }
+
+  // Extract JSON (model might wrap it in prose or code fences).
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error("Insights: no JSON found in response");
+    return;
+  }
+
+  let parsed: MatchInsights;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    console.error("Insights JSON parse error:", err, raw.slice(0, 200));
+    return;
+  }
+
+  // Minimal shape validation — defensive, the model occasionally slips.
+  const highlights = Array.isArray(parsed.highlights) ? parsed.highlights.slice(0, 5) : [];
+  const starters = Array.isArray(parsed.starters) ? parsed.starters.slice(0, 3) : [];
+  const tags = Array.isArray(parsed.tags) ? parsed.tags.slice(0, 6) : [];
+
+  if (highlights.length === 0 && starters.length === 0 && tags.length === 0) {
+    console.warn("Insights: all arrays empty, skipping insert");
+    return;
+  }
+
+  const { error } = await supabase.from("agent_match_insights").upsert({
+    match_id: matchId,
+    conversation_id: conversationId,
+    highlights,
+    starters,
+    tags,
+  }, { onConflict: "match_id" });
+
+  if (error) console.error("Insights upsert error:", error);
+  else console.log(`Insights saved for match ${matchId}: ${highlights.length}h ${starters.length}s ${tags.length}t`);
+}
+
 async function runAgentConversation(conversationId: string, model: string) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -278,12 +401,23 @@ async function runAgentConversation(conversationId: string, model: string) {
     .eq("id", conv.queue_id);
 
   if (finalResult === "matched") {
-    await supabase.from("matches").insert({
+    const { data: matchRow } = await supabase.from("matches").insert({
       user_a_id: conv.agent_a.user_id,
       user_b_id: conv.agent_b.user_id,
       conversation_id: conversationId,
-    });
+    }).select("id").single();
     console.log(`MATCH: ${conv.agent_a.user_id} <-> ${conv.agent_b.user_id}`);
+
+    // Generate insights (highlights, starters, tags) for the new match.
+    // Runs best-effort — a failure here must not break the match flow.
+    if (matchRow?.id) {
+      generateMatchInsights({
+        matchId: matchRow.id,
+        conversationId,
+        messages,
+        model,
+      }).catch((err) => console.error("Insight generation failed:", err));
+    }
 
     try {
       const avgScore = Math.round(((agentAVerdict.score || 0) + (agentBVerdict.score || 0)) / 2);

@@ -53,7 +53,26 @@
     "compatibilityScore": "{{score}} match",
     "sayHi": "Say hi 💬",
     "viewProfile": "View profile",
+    "viewHighlights": "See what your agents found",
     "notNow": "Not now"
+  },
+
+  "highlightReel": {
+    "header": "Agent Highlights",
+    "headerWithName": "Agent Highlights with {{name}}",
+    "tapHint": "Tap to continue"
+  },
+
+  "starterCards": {
+    "header": "Ready-made openers",
+    "sub": "Your agents found common ground. Pick one or write your own.",
+    "basedOn": "based on {{topic}}",
+    "dismiss": "I'll start myself"
+  },
+
+  "contextTags": {
+    "caption": "Your agents discussed",
+    "seed": "I wanted to talk about {{topic}}..."
   },
 
   "swipe": {

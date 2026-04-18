@@ -1,0 +1,23 @@
+# Extends .gitignore for EAS build uploads.
+# Only list things that should NOT be uploaded beyond what .gitignore catches.
+
+.claude/
+.vscode/
+screens_backup/
+__tests__/
+test-results/
+coverage/
+supabase/
+scripts/
+
+# Root-level docs and screenshots (Expo server doesn't need these)
+/*.md
+/*.png
+/*.jpg
+/*.jpeg
+/*.log
+
+# Local prebuild artifacts (if they ever exist locally)
+/ios/
+/android/
+/.expo/

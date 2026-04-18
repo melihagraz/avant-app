@@ -566,10 +566,7 @@ const s = StyleSheet.create({
   avatarImg: { width: 120, height: 120, borderRadius: 60 },
   avatarPlaceholder: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { fontSize: 48, fontWeight: '800', color: '#FF6B9D' },
-  avatarAddBtn: { position: 'absolute', bottom: 2, right: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: '#7C3AED', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#F8F5FF' },
-  avatarAddIcon: { color: '#fff', fontSize: 22, fontWeight: '400', lineHeight: 24 },
   avatarName: { fontSize: 28, fontWeight: '800', color: '#2D1B4E', marginTop: 4 },
-  avatarSub: { fontSize: 15, color: '#9B8AB8', fontWeight: '600' },
   // Menu redesign styles
   nameRow: {
     flexDirection: 'row',
@@ -718,23 +715,6 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  premiumCard: {
-    borderRadius: 32, overflow: 'hidden',
-    shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 14,
-  },
-  premiumGrad: { alignItems: 'center', padding: 32, borderRadius: 32 },
-  premiumIcon: { fontSize: 36, marginBottom: 8 },
-  premiumTitle: { fontSize: 26, fontWeight: '900', color: '#fff', marginBottom: 6, letterSpacing: -0.5 },
-  premiumDesc: { fontSize: 14, color: 'rgba(255,255,255,0.75)', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
-  premiumPrice: { fontSize: 36, fontWeight: '900', color: '#fff', marginBottom: 4, letterSpacing: -1 },
-  premiumDuration: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '500', marginBottom: 8 },
-  premiumBuyBtn: {
-    backgroundColor: '#fff', borderRadius: 28, paddingVertical: 18, paddingHorizontal: 56, marginBottom: 18, marginTop: 4,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8,
-  },
-  premiumBuyTxt: { fontSize: 16, fontWeight: '800', color: '#C084FC', letterSpacing: 0.3 },
-  premiumLegal: { fontSize: 11, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 16, marginBottom: 12, paddingHorizontal: 8 },
   premiumLinks: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   premiumLink: { fontSize: 12, color: '#fff', fontWeight: '700', textDecorationLine: 'underline' },
   premiumLinkSep: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },

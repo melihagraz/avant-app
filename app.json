@@ -57,14 +57,14 @@
         }
       ],
       "@sentry/react-native/expo",
-      "@sentry/react-native",
       "expo-font",
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "Avant uses your location to automatically detect your city during onboarding. This is optional — you can always type your city manually instead."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "supabaseUrl": "https://ertyxalazqtmdowjdzsq.supabase.co",
